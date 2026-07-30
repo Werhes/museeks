@@ -3,8 +3,14 @@ name: Build and Release
 on:
   push:
     branches: [ main, master ]
+    paths-ignore:
+      - 'ios/**'
+      - 'macos/**'
   pull_request:
     branches: [ main, master ]
+    paths-ignore:
+      - 'ios/**'
+      - 'macos/**'
   workflow_dispatch:
 
 jobs:
@@ -28,6 +34,13 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.x'
+      - name: Setup Visual Studio C++ tools
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Install Windows SDK and CMake
+        run: |
+          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
+          choco install windows-sdk-10-version-20348-all -y
+        shell: pwsh
       - run: flutter pub get
       - run: flutter build windows --release
       - uses: actions/upload-artifact@v4
@@ -85,3 +98,35 @@ jobs:
         with:
           name: museeks-web
           path: build/web/
+
+  build_macos:
+    name: Build macOS
+    runs-on: macos-latest
+    needs: analyze
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+      - run: flutter pub get
+      - run: flutter build macos --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: museeks-macos
+          path: build/macos/Build/Products/Release/
+
+  build_ios:
+    name: Build iOS
+    runs-on: macos-latest
+    needs: analyze
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+      - run: flutter pub get
+      - run: flutter build ios --release --no-codesign
+      - uses: actions/upload-artifact@v4
+        with:
+          name: museeks-ios
+          path: build/ios/iphoneos/
