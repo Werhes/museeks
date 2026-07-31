@@ -101,10 +101,23 @@ class VKApiService extends ChangeNotifier {
         headers: {
           'User-Agent': _userAgent,
           'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json',
         },
         body: body,
       );
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      
+      if (response.body.isEmpty) {
+        AppLogger.error('Empty response body', action: 'NETWORK');
+        return {'error': {'error_msg': 'Empty response from server'}};
+      }
+      
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        AppLogger.error('Unexpected response type: ${decoded.runtimeType}', action: 'NETWORK');
+        return {'error': {'error_msg': 'Unexpected response format'}};
+      }
+      
+      final data = decoded;
       AppLogger.network('POST', url, statusCode: response.statusCode, data: data);
       return data;
     } catch (e) {
@@ -378,6 +391,72 @@ class VKApiService extends ChangeNotifier {
     }
     AppLogger.warning('URL не найден', action: 'AUDIO');
     return null;
+  }
+
+  /// Получение текста песни
+  Future<String?> getLyrics(int lyricsId) async {
+    AppLogger.info('Получение текста песни: lyrics_id=$lyricsId', action: 'LYRICS');
+    final data = await _vkGet('audio.getLyrics', {
+      'lyrics_id': lyricsId.toString(),
+    });
+    final text = data['response']?['text'] as String?;
+    if (text != null) {
+      AppLogger.success('Текст песни получен (${text.length} символов)', action: 'LYRICS');
+    } else {
+      AppLogger.warning('Текст песни не найден', action: 'LYRICS');
+    }
+    return text;
+  }
+
+  /// Добавить трек в избранное
+  Future<bool> addToFavorites(Track track) async {
+    AppLogger.info('Добавление в избранное: ${track.title}', action: 'FAVORITES');
+    final data = await _vkGet('audio.add', {
+      'audio_id': track.id.toString(),
+      'owner_id': track.ownerId.toString(),
+    });
+    final success = data['response'] != null;
+    if (success) AppLogger.success('Добавлено в избранное', action: 'FAVORITES');
+    return success;
+  }
+
+  /// Удалить трек из избранного
+  Future<bool> removeFromFavorites(Track track) async {
+    AppLogger.info('Удаление из избранного: ${track.title}', action: 'FAVORITES');
+    final data = await _vkGet('audio.delete', {
+      'audio_id': track.id.toString(),
+      'owner_id': track.ownerId.toString(),
+    });
+    final success = data['response'] == 1;
+    if (success) AppLogger.success('Удалено из избранного', action: 'FAVORITES');
+    return success;
+  }
+
+  /// Вход по токену (как в FlutterVK)
+  Future<bool> loginWithToken(String token) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    AppLogger.info('Вход по токену', action: 'AUTH');
+
+    _accessToken = token;
+
+    try {
+      await _fetchCurrentUser();
+      _isAuthenticated = true;
+      AppLogger.success('Вход по токену выполнен! Пользователь: ${_currentUser?.fullName}', action: 'AUTH');
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _accessToken = null;
+      _error = 'Неверный токен';
+      _isAuthenticated = false;
+      _isLoading = false;
+      AppLogger.error('Ошибка входа по токену', action: 'AUTH', error: e);
+      notifyListeners();
+      return false;
+    }
   }
 
   void logout() {

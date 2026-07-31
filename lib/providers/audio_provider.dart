@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
 import '../models/track.dart';
 import '../services/vk_api_service.dart';
+import '../utils/logger.dart';
 
 enum RepeatMode { none, one, all }
 
@@ -24,6 +28,18 @@ class AudioProvider extends ChangeNotifier {
   String _searchQuery = '';
   String _activeSection = 'my_music';
   bool _isLoading = false;
+
+  // Queue
+  final List<Track> _queue = [];
+  int _queueIndex = -1;
+
+  // Lyrics
+  String? _currentLyrics;
+  bool _isLoadingLyrics = false;
+
+  // Downloads
+  final Set<String> _downloadedIds = {};
+  final Map<String, double> _downloadProgress = {};
 
   // Stream subscriptions
   StreamSubscription? _positionSub;
@@ -62,6 +78,21 @@ class AudioProvider extends ChangeNotifier {
   String get activeSection => _activeSection;
   bool get isLoading => _isLoading;
   AudioPlayer get player => _player;
+
+  // Queue getters
+  List<Track> get queue => List.unmodifiable(_queue);
+  int get queueIndex => _queueIndex;
+  bool get hasQueue => _queue.isNotEmpty;
+
+  // Lyrics getters
+  String? get currentLyrics => _currentLyrics;
+  bool get isLoadingLyrics => _isLoadingLyrics;
+
+  // Download getters
+  Set<String> get downloadedIds => _downloadedIds;
+  bool isDownloaded(Track track) => _downloadedIds.contains(track.fullId);
+  double getDownloadProgress(Track track) =>
+      _downloadProgress[track.fullId] ?? 0.0;
 
   void _setupPlayerListeners() {
     _positionSub = _player.positionStream.listen((pos) {
@@ -159,6 +190,7 @@ class AudioProvider extends ChangeNotifier {
 
     _currentIndex = index;
     _currentTrack = _tracks[index];
+    _currentLyrics = null;
 
     // Получаем URL аудио
     final audioUrl = await _apiService.getAudioUrl(_currentTrack!);
@@ -172,9 +204,27 @@ class AudioProvider extends ChangeNotifier {
       await _player.play();
       _isPlaying = true;
       notifyListeners();
+
+      // Загружаем текст песни
+      _loadLyrics(_currentTrack!);
     } catch (e) {
-      // Ошибка воспроизведения
+      AppLogger.error('Ошибка воспроизведения', action: 'PLAYER', error: e);
     }
+  }
+
+  /// Воспроизведение трека из очереди
+  Future<void> playFromQueue(int index) async {
+    if (index < 0 || index >= _queue.length) return;
+
+    _queueIndex = index;
+    final track = _queue[index];
+
+    // Добавляем в основной список если нет
+    if (!_tracks.contains(track)) {
+      _tracks.add(track);
+    }
+    final trackIndex = _tracks.indexOf(track);
+    await playTrack(trackIndex);
   }
 
   /// Воспроизведение/пауза
@@ -195,6 +245,12 @@ class AudioProvider extends ChangeNotifier {
   Future<void> next() async {
     if (_tracks.isEmpty) return;
 
+    // Если есть очередь, играем из неё
+    if (_queue.isNotEmpty && _queueIndex < _queue.length - 1) {
+      await playFromQueue(_queueIndex + 1);
+      return;
+    }
+
     int nextIndex;
     if (_isShuffled) {
       nextIndex = DateTime.now().millisecondsSinceEpoch % _tracks.length;
@@ -212,6 +268,12 @@ class AudioProvider extends ChangeNotifier {
     // Если прошло больше 3 секунд, перематываем в начало
     if (_position.inSeconds > 3) {
       await _player.seek(Duration.zero);
+      return;
+    }
+
+    // Если есть очередь и мы не в начале
+    if (_queue.isNotEmpty && _queueIndex > 0) {
+      await playFromQueue(_queueIndex - 1);
       return;
     }
 
@@ -234,6 +296,7 @@ class AudioProvider extends ChangeNotifier {
     _currentIndex = -1;
     _position = Duration.zero;
     _duration = Duration.zero;
+    _currentLyrics = null;
     notifyListeners();
   }
 
@@ -278,13 +341,162 @@ class AudioProvider extends ChangeNotifier {
   void toggleFavorite(Track track) {
     if (_favoriteIds.contains(track.fullId)) {
       _favoriteIds.remove(track.fullId);
+      _apiService.removeFromFavorites(track);
     } else {
       _favoriteIds.add(track.fullId);
+      _apiService.addToFavorites(track);
     }
     notifyListeners();
   }
 
   bool isFavorite(Track track) => _favoriteIds.contains(track.fullId);
+
+  // ========== QUEUE MANAGEMENT ==========
+
+  /// Добавить трек в очередь
+  void addToQueue(Track track) {
+    _queue.add(track);
+    if (_queueIndex == -1) _queueIndex = 0;
+    notifyListeners();
+  }
+
+  /// Добавить трек следующим в очереди
+  void addNextToQueue(Track track) {
+    final insertIndex = _queueIndex + 1;
+    if (insertIndex <= _queue.length) {
+      _queue.insert(insertIndex, track);
+    } else {
+      _queue.add(track);
+    }
+    notifyListeners();
+  }
+
+  /// Удалить трек из очереди
+  void removeFromQueue(int index) {
+    if (index < 0 || index >= _queue.length) return;
+    _queue.removeAt(index);
+    if (_queueIndex >= index && _queueIndex > 0) {
+      _queueIndex--;
+    }
+    notifyListeners();
+  }
+
+  /// Очистить очередь
+  void clearQueue() {
+    _queue.clear();
+    _queueIndex = -1;
+    notifyListeners();
+  }
+
+  /// Переместить трек в очереди
+  void moveInQueue(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= _queue.length) return;
+    if (newIndex < 0 || newIndex >= _queue.length) return;
+    final track = _queue.removeAt(oldIndex);
+    _queue.insert(newIndex, track);
+    if (_queueIndex == oldIndex) {
+      _queueIndex = newIndex;
+    }
+    notifyListeners();
+  }
+
+  // ========== LYRICS ==========
+
+  /// Загрузка текста песни
+  Future<void> _loadLyrics(Track track) async {
+    _isLoadingLyrics = true;
+    _currentLyrics = null;
+    notifyListeners();
+
+    try {
+      // Пробуем получить lyrics_id из VK API
+      await _apiService.getAudioUrl(track);
+      // Пока заглушка — VK lyrics API может не работать
+      _currentLyrics = null;
+    } catch (e) {
+      AppLogger.error('Ошибка загрузки текста', action: 'LYRICS', error: e);
+    }
+
+    _isLoadingLyrics = false;
+    notifyListeners();
+  }
+
+  /// Загрузка текста по lyrics_id
+  Future<void> loadLyricsById(int lyricsId) async {
+    _isLoadingLyrics = true;
+    notifyListeners();
+
+    final text = await _apiService.getLyrics(lyricsId);
+    _currentLyrics = text;
+    _isLoadingLyrics = false;
+    notifyListeners();
+  }
+
+  // ========== DOWNLOADS ==========
+
+  /// Скачивание трека для оффлайн
+  Future<void> downloadTrack(Track track) async {
+    if (_downloadedIds.contains(track.fullId)) return;
+
+    _downloadProgress[track.fullId] = 0.0;
+    notifyListeners();
+
+    try {
+      final audioUrl = await _apiService.getAudioUrl(track);
+      if (audioUrl == null) {
+        AppLogger.error('URL не найден для скачивания', action: 'DOWNLOAD');
+        return;
+      }
+
+      final dir = await getApplicationDocumentsDirectory();
+      final downloadDir = Directory('${dir.path}/downloads');
+      if (!await downloadDir.exists()) {
+        await downloadDir.create(recursive: true);
+      }
+
+      final filePath = '${downloadDir.path}/${track.fullId}.mp3';
+      final file = File(filePath);
+
+      final response = await http.get(Uri.parse(audioUrl));
+      await file.writeAsBytes(response.bodyBytes);
+
+      _downloadedIds.add(track.fullId);
+      _downloadProgress[track.fullId] = 1.0;
+      AppLogger.success('Трек скачан: ${track.title}', action: 'DOWNLOAD');
+      notifyListeners();
+    } catch (e) {
+      _downloadProgress.remove(track.fullId);
+      AppLogger.error('Ошибка скачивания', action: 'DOWNLOAD', error: e);
+      notifyListeners();
+    }
+  }
+
+  /// Удаление скачанного трека
+  Future<void> deleteDownload(Track track) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final filePath = '${dir.path}/downloads/${track.fullId}.mp3';
+      final file = File(filePath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+      _downloadedIds.remove(track.fullId);
+      _downloadProgress.remove(track.fullId);
+      notifyListeners();
+    } catch (e) {
+      AppLogger.error('Ошибка удаления', action: 'DOWNLOAD', error: e);
+    }
+  }
+
+  /// Получить путь к скачанному файлу
+  Future<String?> getDownloadedPath(Track track) async {
+    if (!_downloadedIds.contains(track.fullId)) return null;
+    final dir = await getApplicationDocumentsDirectory();
+    final filePath = '${dir.path}/downloads/${track.fullId}.mp3';
+    final file = File(filePath);
+    if (await file.exists()) return filePath;
+    return null;
+  }
 
   @override
   void dispose() {

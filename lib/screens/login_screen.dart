@@ -15,11 +15,13 @@ class _LoginScreenState extends State<LoginScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _codeController = TextEditingController();
+  final _tokenController = TextEditingController();
   final _phoneFocusNode = FocusNode();
 
   bool _showPassword = false;
   bool _showCodeInput = false;
   bool _showMethodSelection = false;
+  bool _showTokenInput = false;
   bool _obscurePassword = true;
   List<VerificationMethod> _availableMethods = [];
   Map<String, dynamic>? _profile;
@@ -36,6 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _phoneController.dispose();
     _passwordController.dispose();
     _codeController.dispose();
+    _tokenController.dispose();
     _phoneFocusNode.dispose();
     super.dispose();
   }
@@ -80,6 +83,14 @@ class _LoginScreenState extends State<LoginScreen> {
     if (success && mounted) Navigator.of(context).pushReplacementNamed('/home');
   }
 
+  Future<void> _loginWithToken() async {
+    final api = context.read<VKApiService>();
+    final token = _tokenController.text.trim();
+    if (token.isEmpty) return;
+    final success = await api.loginWithToken(token);
+    if (success && mounted) Navigator.of(context).pushReplacementNamed('/home');
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -98,11 +109,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         _buildLogo(cs),
                         const SizedBox(height: 40),
-                        if (!_showPassword && !_showCodeInput && !_showMethodSelection)
+                        if (!_showPassword && !_showCodeInput && !_showMethodSelection && !_showTokenInput)
                           _buildPhoneInput(api, cs),
                         if (_showPassword) _buildPasswordInput(api, cs),
                         if (_showMethodSelection && !_showCodeInput) _buildMethodSelection(api, cs),
                         if (_showCodeInput) _buildCodeInput(api, cs),
+                        if (_showTokenInput) _buildTokenInput(api, cs),
                         if (api.error != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 16),
@@ -112,6 +124,19 @@ class _LoginScreenState extends State<LoginScreen> {
                           const Padding(
                             padding: EdgeInsets.only(top: 24),
                             child: CircularProgressIndicator(),
+                          ),
+                        const SizedBox(height: 16),
+                        // Кнопка переключения на вход по токену
+                        if (!_showPassword && !_showCodeInput && !_showMethodSelection)
+                          TextButton.icon(
+                            icon: Icon(Icons.key_rounded, size: 18,
+                                color: cs.onSurface.withValues(alpha: 0.6)),
+                            label: Text(
+                              _showTokenInput ? 'Войти по номеру' : 'Войти по токену',
+                              style: TextStyle(
+                                  color: cs.onSurface.withValues(alpha: 0.6), fontSize: 13),
+                            ),
+                            onPressed: () => setState(() => _showTokenInput = !_showTokenInput),
                           ),
                       ],
                     );
@@ -490,6 +515,63 @@ class _LoginScreenState extends State<LoginScreen> {
           onPressed: () => setState(() { _showCodeInput = false; _codeController.clear(); }),
           child: Text('Назад',
               style: TextStyle(color: cs.onSurface.withValues(alpha: 0.6), fontSize: 14)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTokenInput(VKApiService api, ColorScheme cs) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cs.primaryContainer.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: cs.primary, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Вставьте access_token, полученный от VK. '
+                  'Можно получить через VK Admin или Kate Mobile.',
+                  style: TextStyle(color: cs.onSurface.withValues(alpha: 0.6), fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: TextField(
+            controller: _tokenController,
+            style: TextStyle(color: cs.onSurface, fontSize: 14, fontFamily: 'monospace'),
+            decoration: InputDecoration(
+              hintText: 'vk1.a.xxxxx...',
+              hintStyle: TextStyle(color: cs.onSurface.withValues(alpha: 0.4), fontSize: 14),
+              prefixIcon: Icon(Icons.key_rounded, color: cs.onSurface.withValues(alpha: 0.4)),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            ),
+            textInputAction: TextInputAction.go,
+            onSubmitted: (_) => _loginWithToken(),
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: FilledButton(
+            onPressed: api.isLoading ? null : _loginWithToken,
+            child: const Text('Войти по токену',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          ),
         ),
       ],
     );

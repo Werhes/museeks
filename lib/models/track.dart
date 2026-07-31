@@ -8,6 +8,9 @@ class Track {
   final String? audioUrl;
   final String? albumTitle;
   final bool isAvailable;
+  final String? lyricsText;
+  final bool isLiked;
+  final bool isExplicit;
 
   Track({
     required this.id,
@@ -19,6 +22,9 @@ class Track {
     this.audioUrl,
     this.albumTitle,
     this.isAvailable = true,
+    this.lyricsText,
+    this.isLiked = false,
+    this.isExplicit = false,
   });
 
   factory Track.fromJson(Map<String, dynamic> json) {
@@ -34,6 +40,28 @@ class Track {
       audioUrl: json['url'] as String?,
       albumTitle: json['album']?['title'] as String?,
       isAvailable: json['is_available'] as bool? ?? true,
+      isExplicit: json['explicit'] == true || json['explicit'] == 1,
+    );
+  }
+
+  Track copyWith({
+    String? lyricsText,
+    bool? isLiked,
+    String? audioUrl,
+  }) {
+    return Track(
+      id: id,
+      ownerId: ownerId,
+      title: title,
+      artist: artist,
+      duration: duration,
+      albumArtUrl: albumArtUrl,
+      audioUrl: audioUrl ?? this.audioUrl,
+      albumTitle: albumTitle,
+      isAvailable: isAvailable,
+      lyricsText: lyricsText ?? this.lyricsText,
+      isLiked: isLiked ?? this.isLiked,
+      isExplicit: isExplicit,
     );
   }
 
@@ -58,6 +86,14 @@ class Track {
   }
 
   String get fullId => '${ownerId}_$id';
+
+  String get geniusUrl {
+    final titleAndArtist = '$artist-$title'
+        .replaceAll(RegExp(r'[^\w\s-]'), '')
+        .replaceAll(RegExp(r'\s+'), '-')
+        .toLowerCase();
+    return 'https://genius.com/${Uri.encodeFull(titleAndArtist)}-lyrics';
+  }
 
   @override
   bool operator ==(Object other) =>

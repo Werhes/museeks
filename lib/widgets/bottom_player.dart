@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/audio_provider.dart' as audio_prov;
 import '../models/track.dart';
+import 'full_screen_player.dart';
 
 class BottomPlayer extends StatelessWidget {
   const BottomPlayer({super.key});
@@ -12,7 +13,16 @@ class BottomPlayer extends StatelessWidget {
       builder: (context, provider, child) {
         final track = provider.currentTrack;
         if (track == null) return _buildEmptyPlayer(context);
-        return _buildPlayer(provider, track, context);
+        return GestureDetector(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const FullScreenPlayer(),
+              ),
+            );
+          },
+          child: _buildPlayer(provider, track, context),
+        );
       },
     );
   }
