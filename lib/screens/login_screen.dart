@@ -26,11 +26,25 @@ class _LoginScreenState extends State<LoginScreen> {
   List<VerificationMethod> _availableMethods = [];
   Map<String, dynamic>? _profile;
   bool _showLogs = false;
+  bool _isAutoLogging = false;
 
   @override
   void initState() {
     super.initState();
-    _phoneFocusNode.requestFocus();
+    _checkAutoLogin();
+  }
+
+  /// Проверка автоматического входа по сохранённому токену
+  Future<void> _checkAutoLogin() async {
+    final api = context.read<VKApiService>();
+    if (api.isLoggedIn) {
+      setState(() => _isAutoLogging = true);
+      AppLogger.info('Обнаружен сохранённый токен, выполняем автоматический вход', action: 'AUTH');
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/home');
+      }
+    }
   }
 
   @override
@@ -104,6 +118,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: Consumer<VKApiService>(
                   builder: (context, api, child) {
+                    // Если идёт автоматический вход — показываем загрузку
+                    if (_isAutoLogging) {
+                      return _buildAutoLoginLoading(cs);
+                    }
+
                     return Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -118,7 +137,22 @@ class _LoginScreenState extends State<LoginScreen> {
                         if (api.error != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 16),
-                            child: Text(api.error!, style: TextStyle(color: cs.error, fontSize: 13)),
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: cs.error.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.error_outline, color: cs.error, size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(api.error!, style: TextStyle(color: cs.error, fontSize: 13)),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         if (api.isLoading)
                           const Padding(
@@ -158,6 +192,39 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAutoLoginLoading(ColorScheme cs) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            color: cs.primaryContainer,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: cs.primary.withValues(alpha: 0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Icon(Icons.music_note_rounded, color: cs.onPrimaryContainer, size: 40),
+        ),
+        const SizedBox(height: 24),
+        Text('Museeks',
+            style: TextStyle(
+                color: cs.onSurface, fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
+        const SizedBox(height: 16),
+        const CircularProgressIndicator(),
+        const SizedBox(height: 16),
+        Text('Автоматический вход...',
+            style: TextStyle(color: cs.onSurface.withValues(alpha: 0.6), fontSize: 14)),
+      ],
     );
   }
 

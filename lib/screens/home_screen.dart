@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/audio_provider.dart';
@@ -7,6 +8,7 @@ import '../widgets/bottom_player.dart';
 import 'main_tab_screen.dart';
 import 'search_screen.dart';
 import 'favorites_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -37,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final cs = Theme.of(context).colorScheme;
     final api = context.watch<VKApiService>();
     final user = api.currentUser;
+    final isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -51,7 +54,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(cs),
+      bottomNavigationBar: isDesktop
+          ? null // На десктопе используем боковую панель
+          : _buildBottomNav(cs),
+      // На десктопе добавляем боковую навигацию
+      drawer: isDesktop ? _buildDesktopDrawer(cs) : null,
     );
   }
 
@@ -85,10 +92,15 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
+          // Кнопка настроек — теперь работает!
           IconButton(
             icon: Icon(Icons.settings_rounded,
                 color: cs.onSurface.withValues(alpha: 0.5), size: 22),
-            onPressed: () {},
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
+            },
           ),
         ],
       ),
@@ -112,6 +124,98 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Боковое меню для десктопа (как во FlutterVK)
+  Widget _buildDesktopDrawer(ColorScheme cs) {
+    return Drawer(
+      backgroundColor: cs.surface,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Шапка
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: cs.surfaceContainerLow,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: cs.primaryContainer,
+                    child: Icon(Icons.music_note_rounded, color: cs.onPrimaryContainer, size: 28),
+                  ),
+                  const SizedBox(height: 12),
+                  Text('Museeks',
+                      style: TextStyle(
+                          color: cs.onSurface, fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text('VK Music Player',
+                      style: TextStyle(
+                          color: cs.onSurface.withValues(alpha: 0.6), fontSize: 13)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Пункты меню
+            _buildDrawerItem(cs, icon: Icons.home_rounded, title: 'Главная', index: 0),
+            _buildDrawerItem(cs, icon: Icons.search_rounded, title: 'Поиск', index: 1),
+            _buildDrawerItem(cs, icon: Icons.favorite_rounded, title: 'Любимые', index: 2),
+            const Divider(height: 16),
+            _buildDrawerItem(cs, icon: Icons.settings_rounded, title: 'Настройки', index: -1, isSettings: true),
+            const Spacer(),
+
+            // Выход
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: TextButton.icon(
+                icon: Icon(Icons.logout_rounded, color: cs.onSurface.withValues(alpha: 0.5), size: 18),
+                label: Text('Выйти',
+                    style: TextStyle(color: cs.onSurface.withValues(alpha: 0.5), fontSize: 13)),
+                onPressed: () {
+                  context.read<VKApiService>().logout();
+                  Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDrawerItem(ColorScheme cs, {
+    required IconData icon,
+    required String title,
+    required int index,
+    bool isSettings = false,
+  }) {
+    final isActive = !isSettings && _currentTabIndex == index;
+    return ListTile(
+      leading: Icon(icon,
+          color: isActive ? cs.primary : cs.onSurface.withValues(alpha: 0.7), size: 22),
+      title: Text(title,
+          style: TextStyle(
+              color: isActive ? cs.primary : cs.onSurface,
+              fontSize: 15,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.normal)),
+      selected: isActive,
+      selectedTileColor: cs.primaryContainer.withValues(alpha: 0.3),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onTap: () {
+        if (isSettings) {
+          Navigator.of(context).pop(); // закрываем drawer
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (context) => const SettingsScreen()),
+          );
+        } else {
+          setState(() => _currentTabIndex = index);
+          Navigator.of(context).pop(); // закрываем drawer
+        }
+      },
     );
   }
 

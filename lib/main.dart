@@ -5,8 +5,9 @@ import 'services/vk_api_service.dart';
 import 'providers/audio_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'utils/logger.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -15,6 +16,12 @@ void main() {
   ));
 
   final vkApiService = VKApiService();
+
+  // Пытаемся загрузить сохранённый токен
+  final hasSavedToken = await vkApiService.tryLoadSavedToken();
+  if (hasSavedToken) {
+    AppLogger.success('Автоматический вход по сохранённому токену', action: 'AUTH');
+  }
 
   runApp(
     MultiProvider(

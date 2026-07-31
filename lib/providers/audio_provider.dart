@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import '../models/track.dart';
 import '../services/vk_api_service.dart';
+import '../services/discord_rpc_service.dart';
 import '../utils/logger.dart';
 
 enum RepeatMode { none, one, all }
@@ -28,6 +29,10 @@ class AudioProvider extends ChangeNotifier {
   String _searchQuery = '';
   String _activeSection = 'my_music';
   bool _isLoading = false;
+
+  // Search history
+  final List<String> _searchHistory = [];
+  static const int _maxSearchHistory = 10;
 
   // Queue
   final List<Track> _queue = [];
@@ -77,6 +82,9 @@ class AudioProvider extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   String get activeSection => _activeSection;
   bool get isLoading => _isLoading;
+
+  // Search history getters
+  List<String> get searchHistory => List.unmodifiable(_searchHistory);
   AudioPlayer get player => _player;
 
   // Queue getters
@@ -165,6 +173,9 @@ class AudioProvider extends ChangeNotifier {
       return;
     }
 
+    // Сохраняем в историю поиска
+    _addToSearchHistory(query);
+
     _isLoading = true;
     notifyListeners();
 
@@ -176,6 +187,27 @@ class AudioProvider extends ChangeNotifier {
 
   void setSearchQuery(String query) {
     _searchQuery = query;
+    notifyListeners();
+  }
+
+  /// Добавить запрос в историю поиска
+  void _addToSearchHistory(String query) {
+    _searchHistory.remove(query);
+    _searchHistory.insert(0, query);
+    if (_searchHistory.length > _maxSearchHistory) {
+      _searchHistory.removeLast();
+    }
+  }
+
+  /// Удалить запрос из истории
+  void removeFromSearchHistory(String query) {
+    _searchHistory.remove(query);
+    notifyListeners();
+  }
+
+  /// Очистить историю поиска
+  void clearSearchHistory() {
+    _searchHistory.clear();
     notifyListeners();
   }
 
@@ -191,6 +223,9 @@ class AudioProvider extends ChangeNotifier {
     _currentIndex = index;
     _currentTrack = _tracks[index];
     _currentLyrics = null;
+
+    // Discord RPC
+    DiscordRPCService.onTrackChanged(_currentTrack, true);
 
     // Получаем URL аудио
     final audioUrl = await _apiService.getAudioUrl(_currentTrack!);
@@ -236,8 +271,10 @@ class AudioProvider extends ChangeNotifier {
 
     if (_isPlaying) {
       await _player.pause();
+      DiscordRPCService.onPlaybackChanged(_currentTrack, false);
     } else {
       await _player.play();
+      DiscordRPCService.onPlaybackChanged(_currentTrack, true);
     }
   }
 
