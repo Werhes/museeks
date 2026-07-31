@@ -29,84 +29,89 @@ void main() {
   );
 }
 
-// Тема VK — оранжевый фон, как бумага
-class VKTheme {
-  // Основные цвета
-  static const Color background = Color(0xFFFFF3E0); // Светлый оранжево-бумажный
-  static const Color surface = Color(0xFFFFF8E7);   // Ещё светлее
-  static const Color card = Color(0xFFFFF0D0);      // Карточки
-  static const Color primary = Color(0xFFFF6D00);   // Оранжевый VK
-  static const Color primaryLight = Color(0xFFFF8F33);
-  static const Color primaryDark = Color(0xFFE65100);
-  static const Color textPrimary = Color(0xFF1A1A2E);
-  static const Color textSecondary = Color(0xFF6B6B80);
-  static const Color textHint = Color(0xFF9E9EB0);
-  static const Color divider = Color(0x20FF6D00);
-  static const Color accent = Color(0xFFFF6D00);
-  static const Color error = Color(0xFFD32F2F);
-  static const Color success = Color(0xFF2E7D32);
+// Тема Museeks — Material 3 в стиле FlutterVK
+class MuseeksTheme {
+  // Светлая тема
+  static const Color lightBackground = Color(0xFFF5F5F5);
+  static const Color lightSurface = Color(0xFFFFFFFF);
+  static const Color lightPrimary = Color(0xFF6750A4);
+  static const Color lightOnPrimary = Color(0xFFFFFFFF);
+  static const Color lightSecondary = Color(0xFF625B71);
+  static const Color lightSurfaceTint = Color(0xFF6750A4);
 
-  static ThemeData get theme {
+  // Тёмная тема
+  static const Color darkBackground = Color(0xFF1C1B1F);
+  static const Color darkSurface = Color(0xFF2B2930);
+  static const Color darkPrimary = Color(0xFFD0BCFF);
+  static const Color darkOnPrimary = Color(0xFF381E72);
+  static const Color darkSecondary = Color(0xFFCCC2DC);
+  static const Color darkSurfaceTint = Color(0xFFD0BCFF);
+
+  static ThemeData get lightTheme {
     return ThemeData(
+      useMaterial3: true,
       brightness: Brightness.light,
-      primaryColor: primary,
-      scaffoldBackgroundColor: background,
       colorScheme: const ColorScheme.light(
-        primary: primary,
-        secondary: primaryLight,
-        surface: surface,
-        error: error,
+        primary: lightPrimary,
+        onPrimary: lightOnPrimary,
+        secondary: lightSecondary,
+        surface: lightSurface,
+        onSurface: Color(0xFF1C1B1F),
+        error: Color(0xFFB3261E),
+        onError: Color(0xFFFFFFFF),
+        surfaceTint: lightSurfaceTint,
       ),
-      fontFamily: 'Roboto',
       appBarTheme: const AppBarTheme(
-        backgroundColor: surface,
-        foregroundColor: textPrimary,
-        elevation: 0,
         centerTitle: true,
+        elevation: 0,
+        scrolledUnderElevation: 1,
       ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: primary,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-        ),
-      ),
-      textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          foregroundColor: primary,
-        ),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
+      cardTheme: CardThemeData(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: primary.withValues(alpha: 0.2)),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: primary.withValues(alpha: 0.2)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: primary, width: 2),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
-      sliderTheme: SliderThemeData(
-        trackHeight: 4,
-        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-        overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-        activeTrackColor: primary,
-        inactiveTrackColor: primary.withValues(alpha: 0.2),
-        thumbColor: primary,
-        overlayColor: primary.withValues(alpha: 0.1),
+      navigationBarTheme: NavigationBarThemeData(
+        elevation: 0,
+        indicatorShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
       ),
-      iconTheme: const IconThemeData(color: textSecondary),
+    );
+  }
+
+  static ThemeData get darkTheme {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: const ColorScheme.dark(
+        primary: darkPrimary,
+        onPrimary: darkOnPrimary,
+        secondary: darkSecondary,
+        surface: darkSurface,
+        onSurface: Color(0xFFE6E1E5),
+        error: Color(0xFFF2B8B5),
+        onError: Color(0xFF601410),
+        surfaceTint: darkSurfaceTint,
+      ),
+      appBarTheme: const AppBarTheme(
+        centerTitle: true,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+      ),
+      cardTheme: CardThemeData(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        elevation: 0,
+        indicatorShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
     );
   }
 }
@@ -119,7 +124,9 @@ class MuseeksApp extends StatelessWidget {
     return MaterialApp(
       title: 'Museeks',
       debugShowCheckedModeBanner: false,
-      theme: VKTheme.theme,
+      theme: MuseeksTheme.lightTheme,
+      darkTheme: MuseeksTheme.darkTheme,
+      themeMode: ThemeMode.system,
       initialRoute: '/login',
       routes: {
         '/login': (context) => const LoginScreen(),

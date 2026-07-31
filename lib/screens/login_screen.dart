@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../services/vk_api_service.dart';
 import '../utils/logger.dart';
-import '../main.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -82,8 +82,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: VKTheme.background,
+      backgroundColor: cs.surface,
       body: SafeArea(
         child: Stack(
           children: [
@@ -95,22 +96,22 @@ class _LoginScreenState extends State<LoginScreen> {
                     return Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        _buildLogo(),
+                        _buildLogo(cs),
                         const SizedBox(height: 40),
                         if (!_showPassword && !_showCodeInput && !_showMethodSelection)
-                          _buildPhoneInput(api),
-                        if (_showPassword) _buildPasswordInput(api),
-                        if (_showMethodSelection && !_showCodeInput) _buildMethodSelection(api),
-                        if (_showCodeInput) _buildCodeInput(api),
+                          _buildPhoneInput(api, cs),
+                        if (_showPassword) _buildPasswordInput(api, cs),
+                        if (_showMethodSelection && !_showCodeInput) _buildMethodSelection(api, cs),
+                        if (_showCodeInput) _buildCodeInput(api, cs),
                         if (api.error != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 16),
-                            child: Text(api.error!, style: const TextStyle(color: VKTheme.error, fontSize: 13)),
+                            child: Text(api.error!, style: TextStyle(color: cs.error, fontSize: 13)),
                           ),
                         if (api.isLoading)
                           const Padding(
                             padding: EdgeInsets.only(top: 24),
-                            child: CircularProgressIndicator(color: VKTheme.primary),
+                            child: CircularProgressIndicator(),
                           ),
                       ],
                     );
@@ -123,42 +124,59 @@ class _LoginScreenState extends State<LoginScreen> {
               top: 8,
               right: 8,
               child: IconButton(
-                icon: const Icon(Icons.bug_report_rounded, color: VKTheme.textHint),
+                icon: Icon(Icons.bug_report_rounded, color: cs.onSurface.withValues(alpha: 0.5)),
                 onPressed: () => setState(() => _showLogs = !_showLogs),
               ),
             ),
             // Панель логов
-            if (_showLogs) _buildLogsPanel(),
+            if (_showLogs) _buildLogsPanel(cs),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildLogsPanel() {
+  Widget _buildLogsPanel(ColorScheme cs) {
     return Positioned(
       top: 0,
       left: 0,
       right: 0,
       bottom: 0,
       child: Container(
-        color: VKTheme.background.withValues(alpha: 0.95),
+        color: cs.surface.withValues(alpha: 0.95),
         child: Column(
           children: [
             Container(
               padding: const EdgeInsets.all(12),
-              color: VKTheme.primary,
+              color: cs.primaryContainer,
               child: Row(
                 children: [
-                  const Icon(Icons.bug_report, color: Colors.white, size: 20),
+                  Icon(Icons.bug_report, color: cs.onPrimaryContainer, size: 20),
                   const SizedBox(width: 8),
-                  const Expanded(child: Text('Логи приложения', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
-                  TextButton(
-                    onPressed: AppLogger.clear,
-                    child: const Text('Очистить', style: TextStyle(color: Colors.white)),
+                  Expanded(
+                    child: Text('Логи приложения',
+                        style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold)),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
+                    icon: Icon(Icons.copy_rounded, color: cs.onPrimaryContainer, size: 20),
+                    tooltip: 'Копировать все',
+                    onPressed: () {
+                      final logText = AppLogger.logs
+                          .map((log) =>
+                              '${log.levelIcon} ${log.formattedTime}${log.action != null ? ' [${log.action}]' : ''} ${log.message}')
+                          .join('\n');
+                      Clipboard.setData(ClipboardData(text: logText));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Логи скопированы'), duration: Duration(seconds: 2)),
+                      );
+                    },
+                  ),
+                  TextButton(
+                    onPressed: AppLogger.clear,
+                    child: Text('Очистить', style: TextStyle(color: cs.onPrimaryContainer)),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, color: cs.onPrimaryContainer),
                     onPressed: () => setState(() => _showLogs = false),
                   ),
                 ],
@@ -174,22 +192,25 @@ class _LoginScreenState extends State<LoginScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     margin: const EdgeInsets.only(bottom: 2),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.5),
+                      color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('${log.levelIcon} ', style: const TextStyle(fontSize: 12)),
-                        Text('${log.formattedTime} ', style: TextStyle(fontSize: 11, color: VKTheme.textHint)),
+                        Text('${log.formattedTime} ',
+                            style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: 0.5))),
                         if (log.action != null)
-                          Text('[${log.action}] ', style: TextStyle(fontSize: 11, color: VKTheme.primary, fontWeight: FontWeight.w600)),
+                          Text('[${log.action}] ',
+                              style: TextStyle(
+                                  fontSize: 11, color: cs.primary, fontWeight: FontWeight.w600)),
                         Expanded(
                           child: Text(
                             log.message,
                             style: TextStyle(
                               fontSize: 11,
-                              color: log.level == LogLevel.error ? VKTheme.error : VKTheme.textPrimary,
+                              color: log.level == LogLevel.error ? cs.error : cs.onSurface,
                             ),
                           ),
                         ),
@@ -205,51 +226,53 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildLogo() {
+  Widget _buildLogo(ColorScheme cs) {
     return Column(
       children: [
         Container(
           width: 80,
           height: 80,
           decoration: BoxDecoration(
-            color: VKTheme.primary,
+            color: cs.primaryContainer,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: VKTheme.primary.withValues(alpha: 0.3),
+                color: cs.primary.withValues(alpha: 0.3),
                 blurRadius: 20,
                 offset: const Offset(0, 8),
               ),
             ],
           ),
-          child: const Icon(Icons.music_note_rounded, color: Colors.white, size: 40),
+          child: Icon(Icons.music_note_rounded, color: cs.onPrimaryContainer, size: 40),
         ),
         const SizedBox(height: 16),
-        const Text('Museeks', style: TextStyle(color: VKTheme.textPrimary, fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
+        Text('Museeks',
+            style: TextStyle(
+                color: cs.onSurface, fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
         const SizedBox(height: 8),
-        const Text('Войдите в VK для прослушивания музыки', style: TextStyle(color: VKTheme.textSecondary, fontSize: 14)),
+        Text('Войдите в VK для прослушивания музыки',
+            style: TextStyle(color: cs.onSurface.withValues(alpha: 0.6), fontSize: 14)),
       ],
     );
   }
 
-  Widget _buildPhoneInput(VKApiService api) {
+  Widget _buildPhoneInput(VKApiService api, ColorScheme cs) {
     return Column(
       children: [
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: cs.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: VKTheme.primary.withValues(alpha: 0.2)),
           ),
           child: TextField(
             controller: _phoneController,
             focusNode: _phoneFocusNode,
             keyboardType: TextInputType.phone,
-            style: const TextStyle(color: VKTheme.textPrimary, fontSize: 16),
+            style: TextStyle(color: cs.onSurface, fontSize: 16),
             decoration: InputDecoration(
               hintText: 'Номер телефона или email',
-              hintStyle: const TextStyle(color: VKTheme.textHint, fontSize: 16),
-              prefixIcon: const Icon(Icons.phone_android_rounded, color: VKTheme.textHint),
+              hintStyle: TextStyle(color: cs.onSurface.withValues(alpha: 0.4), fontSize: 16),
+              prefixIcon: Icon(Icons.phone_android_rounded, color: cs.onSurface.withValues(alpha: 0.4)),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
@@ -261,42 +284,45 @@ class _LoginScreenState extends State<LoginScreen> {
         SizedBox(
           width: double.infinity,
           height: 52,
-          child: ElevatedButton(
+          child: FilledButton(
             onPressed: api.isLoading ? null : _validatePhone,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: VKTheme.primary,
-              disabledBackgroundColor: VKTheme.primary.withValues(alpha: 0.5),
-            ),
-            child: const Text('Продолжить', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+            child: const Text('Продолжить',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildPasswordInput(VKApiService api) {
+  Widget _buildPasswordInput(VKApiService api, ColorScheme cs) {
     return Column(
       children: [
         if (_profile != null)
           Container(
             padding: const EdgeInsets.all(16),
             margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
             child: Row(
               children: [
                 CircleAvatar(
                   radius: 24,
-                  backgroundColor: VKTheme.primary.withValues(alpha: 0.2),
-                  backgroundImage: _profile!['photo'] != null ? NetworkImage(_profile!['photo'] as String) : null,
-                  child: _profile!['photo'] == null ? const Icon(Icons.person, color: VKTheme.primary) : null,
+                  backgroundColor: cs.primaryContainer,
+                  backgroundImage:
+                      _profile!['photo'] != null ? NetworkImage(_profile!['photo'] as String) : null,
+                  child: _profile!['photo'] == null
+                      ? Icon(Icons.person, color: cs.onPrimaryContainer)
+                      : null,
                 ),
                 const SizedBox(width: 12),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(_profile!['first_name'] as String? ?? 'Незнакомец',
-                        style: const TextStyle(color: VKTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w500)),
-                    Text(_phoneController.text, style: const TextStyle(color: VKTheme.textSecondary, fontSize: 13)),
+                        style: TextStyle(
+                            color: cs.onSurface, fontSize: 16, fontWeight: FontWeight.w500)),
+                    Text(_phoneController.text,
+                        style: TextStyle(color: cs.onSurface.withValues(alpha: 0.6), fontSize: 13)),
                   ],
                 ),
               ],
@@ -304,20 +330,21 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: cs.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: VKTheme.primary.withValues(alpha: 0.2)),
           ),
           child: TextField(
             controller: _passwordController,
             obscureText: _obscurePassword,
-            style: const TextStyle(color: VKTheme.textPrimary, fontSize: 16),
+            style: TextStyle(color: cs.onSurface, fontSize: 16),
             decoration: InputDecoration(
               hintText: 'Пароль',
-              hintStyle: const TextStyle(color: VKTheme.textHint, fontSize: 16),
-              prefixIcon: const Icon(Icons.lock_rounded, color: VKTheme.textHint),
+              hintStyle: TextStyle(color: cs.onSurface.withValues(alpha: 0.4), fontSize: 16),
+              prefixIcon: Icon(Icons.lock_rounded, color: cs.onSurface.withValues(alpha: 0.4)),
               suffixIcon: IconButton(
-                icon: Icon(_obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded, color: VKTheme.textHint),
+                icon: Icon(
+                    _obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                    color: cs.onSurface.withValues(alpha: 0.4)),
                 onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
               ),
               border: InputBorder.none,
@@ -331,35 +358,41 @@ class _LoginScreenState extends State<LoginScreen> {
         SizedBox(
           width: double.infinity,
           height: 52,
-          child: ElevatedButton(
+          child: FilledButton(
             onPressed: api.isLoading ? null : _loginWithPassword,
-            child: const Text('Войти', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+            child: const Text('Войти',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           ),
         ),
         TextButton(
-          onPressed: () => setState(() { _showPassword = false; _showMethodSelection = _availableMethods.isNotEmpty; }),
-          child: const Text('Другие способы входа', style: TextStyle(color: VKTheme.textSecondary, fontSize: 14)),
+          onPressed: () => setState(
+              () { _showPassword = false; _showMethodSelection = _availableMethods.isNotEmpty; }),
+          child: Text('Другие способы входа',
+              style: TextStyle(color: cs.onSurface.withValues(alpha: 0.6), fontSize: 14)),
         ),
       ],
     );
   }
 
-  Widget _buildMethodSelection(VKApiService api) {
+  Widget _buildMethodSelection(VKApiService api, ColorScheme cs) {
     return Column(
       children: [
-        const Text('Выберите способ входа', style: TextStyle(color: VKTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w600)),
+        Text('Выберите способ входа',
+            style: TextStyle(color: cs.onSurface, fontSize: 18, fontWeight: FontWeight.w600)),
         const SizedBox(height: 20),
-        ..._availableMethods.map((method) => _buildMethodButton(api, method)),
+        ..._availableMethods.map((method) => _buildMethodButton(api, method, cs)),
         const SizedBox(height: 16),
         TextButton(
-          onPressed: () => setState(() { _showMethodSelection = false; _showPassword = false; _showCodeInput = false; }),
-          child: const Text('Назад', style: TextStyle(color: VKTheme.textSecondary, fontSize: 14)),
+          onPressed: () => setState(
+              () { _showMethodSelection = false; _showPassword = false; _showCodeInput = false; }),
+          child: Text('Назад',
+              style: TextStyle(color: cs.onSurface.withValues(alpha: 0.6), fontSize: 14)),
         ),
       ],
     );
   }
 
-  Widget _buildMethodButton(VKApiService api, VerificationMethod method) {
+  Widget _buildMethodButton(VKApiService api, VerificationMethod method, ColorScheme cs) {
     IconData icon;
     switch (method.method) {
       case AuthMethod.sms: icon = Icons.sms_rounded; break;
@@ -381,25 +414,29 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: cs.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: VKTheme.primary.withValues(alpha: 0.2)),
             ),
             child: Row(
               children: [
-                Icon(icon, color: VKTheme.primary, size: 24),
+                Icon(icon, color: cs.primary, size: 24),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(method.displayName, style: const TextStyle(color: VKTheme.textPrimary, fontSize: 15, fontWeight: FontWeight.w500)),
+                      Text(method.displayName,
+                          style: TextStyle(
+                              color: cs.onSurface, fontSize: 15, fontWeight: FontWeight.w500)),
                       if (method.description.isNotEmpty)
-                        Text(method.description, style: const TextStyle(color: VKTheme.textSecondary, fontSize: 12)),
+                        Text(method.description,
+                            style:
+                                TextStyle(color: cs.onSurface.withValues(alpha: 0.6), fontSize: 12)),
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, color: VKTheme.textHint),
+                Icon(Icons.chevron_right_rounded,
+                    color: cs.onSurface.withValues(alpha: 0.4)),
               ],
             ),
           ),
@@ -408,29 +445,31 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildCodeInput(VKApiService api) {
+  Widget _buildCodeInput(VKApiService api, ColorScheme cs) {
     return Column(
       children: [
-        const Text('Введите код подтверждения', style: TextStyle(color: VKTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w600)),
+        Text('Введите код подтверждения',
+            style: TextStyle(color: cs.onSurface, fontSize: 18, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
-        const Text('Код отправлен. Проверьте устройство.', style: TextStyle(color: VKTheme.textSecondary, fontSize: 14)),
+        Text('Код отправлен. Проверьте устройство.',
+            style: TextStyle(color: cs.onSurface.withValues(alpha: 0.6), fontSize: 14)),
         const SizedBox(height: 24),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: cs.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: VKTheme.primary.withValues(alpha: 0.2)),
           ),
           child: TextField(
             controller: _codeController,
             keyboardType: TextInputType.number,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: VKTheme.textPrimary, fontSize: 24, letterSpacing: 8),
-            decoration: const InputDecoration(
+            style: TextStyle(color: cs.onSurface, fontSize: 24, letterSpacing: 8),
+            decoration: InputDecoration(
               hintText: '000000',
-              hintStyle: TextStyle(color: VKTheme.textHint, fontSize: 24, letterSpacing: 8),
+              hintStyle:
+                  TextStyle(color: cs.onSurface.withValues(alpha: 0.4), fontSize: 24, letterSpacing: 8),
               border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             ),
             maxLength: 6,
             textInputAction: TextInputAction.go,
@@ -441,14 +480,16 @@ class _LoginScreenState extends State<LoginScreen> {
         SizedBox(
           width: double.infinity,
           height: 52,
-          child: ElevatedButton(
+          child: FilledButton(
             onPressed: api.isLoading ? null : _confirmCode,
-            child: const Text('Подтвердить', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+            child: const Text('Подтвердить',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           ),
         ),
         TextButton(
           onPressed: () => setState(() { _showCodeInput = false; _codeController.clear(); }),
-          child: const Text('Назад', style: TextStyle(color: VKTheme.textSecondary, fontSize: 14)),
+          child: Text('Назад',
+              style: TextStyle(color: cs.onSurface.withValues(alpha: 0.6), fontSize: 14)),
         ),
       ],
     );

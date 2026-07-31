@@ -4,7 +4,6 @@ import '../providers/audio_provider.dart';
 import '../services/vk_api_service.dart';
 import '../models/track.dart';
 import '../widgets/bottom_player.dart';
-import '../main.dart';
 import 'main_tab_screen.dart';
 import 'search_screen.dart';
 import 'favorites_screen.dart';
@@ -35,15 +34,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final api = context.watch<VKApiService>();
     final user = api.currentUser;
 
     return Scaffold(
-      backgroundColor: VKTheme.background,
+      backgroundColor: cs.surface,
       body: SafeArea(
         child: Column(
           children: [
-            _buildTopBar(user),
+            _buildTopBar(user, cs),
             Expanded(
               child: IndexedStack(index: _currentTabIndex, children: _screens),
             ),
@@ -51,28 +51,24 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(),
+      bottomNavigationBar: _buildBottomNav(cs),
     );
   }
 
-  Widget _buildTopBar(VKUser? user) {
+  Widget _buildTopBar(VKUser? user, ColorScheme cs) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      color: VKTheme.surface,
+      color: cs.surfaceContainerLow,
       child: Row(
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              image: user?.photoUrl != null
-                  ? DecorationImage(image: NetworkImage(user!.photoUrl!), fit: BoxFit.cover)
-                  : null,
-              color: VKTheme.primary.withValues(alpha: 0.2),
-            ),
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: cs.primaryContainer,
+            backgroundImage: user?.photoUrl != null
+                ? NetworkImage(user!.photoUrl!)
+                : null,
             child: user?.photoUrl == null
-                ? const Icon(Icons.person_rounded, color: VKTheme.primary, size: 20)
+                ? Icon(Icons.person_rounded, color: cs.onPrimaryContainer, size: 20)
                 : null,
           ),
           const SizedBox(width: 12),
@@ -81,13 +77,17 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(user?.fullName ?? 'Museeks',
-                    style: const TextStyle(color: VKTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
-                const Text('Моя музыка', style: TextStyle(color: VKTheme.textSecondary, fontSize: 12)),
+                    style: TextStyle(
+                        color: cs.onSurface, fontSize: 16, fontWeight: FontWeight.w600)),
+                Text('Моя музыка',
+                    style: TextStyle(
+                        color: cs.onSurface.withValues(alpha: 0.6), fontSize: 12)),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.settings_rounded, color: VKTheme.textHint, size: 22),
+            icon: Icon(Icons.settings_rounded,
+                color: cs.onSurface.withValues(alpha: 0.5), size: 22),
             onPressed: () {},
           ),
         ],
@@ -95,9 +95,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildBottomNav() {
+  Widget _buildBottomNav(ColorScheme cs) {
     return Container(
-      color: VKTheme.surface,
+      color: cs.surfaceContainerLow,
       child: SafeArea(
         top: false,
         child: Padding(
@@ -105,9 +105,9 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildNavItem(icon: Icons.home_rounded, label: 'Главная', index: 0),
-              _buildNavItem(icon: Icons.search_rounded, label: 'Поиск', index: 1),
-              _buildNavItem(icon: Icons.favorite_rounded, label: 'Любимые', index: 2),
+              _buildNavItem(icon: Icons.home_rounded, label: 'Главная', index: 0, cs: cs),
+              _buildNavItem(icon: Icons.search_rounded, label: 'Поиск', index: 1, cs: cs),
+              _buildNavItem(icon: Icons.favorite_rounded, label: 'Любимые', index: 2, cs: cs),
             ],
           ),
         ),
@@ -115,7 +115,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildNavItem({required IconData icon, required String label, required int index}) {
+  Widget _buildNavItem(
+      {required IconData icon, required String label, required int index, required ColorScheme cs}) {
     final isActive = _currentTabIndex == index;
     return GestureDetector(
       onTap: () => setState(() => _currentTabIndex = index),
@@ -123,11 +124,12 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: isActive ? VKTheme.primary : VKTheme.textHint, size: 24),
+          Icon(icon,
+              color: isActive ? cs.primary : cs.onSurface.withValues(alpha: 0.4), size: 24),
           const SizedBox(height: 4),
           Text(label,
               style: TextStyle(
-                  color: isActive ? VKTheme.primary : VKTheme.textHint,
+                  color: isActive ? cs.primary : cs.onSurface.withValues(alpha: 0.4),
                   fontSize: 11,
                   fontWeight: isActive ? FontWeight.w600 : FontWeight.normal)),
         ],

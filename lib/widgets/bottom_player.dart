@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/audio_provider.dart' as audio_prov;
 import '../models/track.dart';
-import '../main.dart';
 
 class BottomPlayer extends StatelessWidget {
   const BottomPlayer({super.key});
@@ -12,40 +11,43 @@ class BottomPlayer extends StatelessWidget {
     return Consumer<audio_prov.AudioProvider>(
       builder: (context, provider, child) {
         final track = provider.currentTrack;
-        if (track == null) return _buildEmptyPlayer();
-        return _buildPlayer(provider, track);
+        if (track == null) return _buildEmptyPlayer(context);
+        return _buildPlayer(provider, track, context);
       },
     );
   }
 
-  Widget _buildEmptyPlayer() {
+  Widget _buildEmptyPlayer(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       height: 72,
-      color: VKTheme.surface,
-      child: const Center(
+      color: cs.surfaceContainerLow,
+      child: Center(
         child: Text('Выберите трек для воспроизведения',
-            style: TextStyle(color: VKTheme.textHint, fontSize: 13)),
+            style:
+                TextStyle(color: cs.onSurface.withValues(alpha: 0.4), fontSize: 13)),
       ),
     );
   }
 
-  Widget _buildPlayer(audio_prov.AudioProvider provider, Track track) {
+  Widget _buildPlayer(audio_prov.AudioProvider provider, Track track, BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       height: 72,
-      color: VKTheme.surface,
+      color: cs.surfaceContainerLow,
       child: Column(
         children: [
-          _buildProgressBar(provider),
+          _buildProgressBar(provider, cs),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
-                  _buildTrackInfo(track),
+                  _buildTrackInfo(track, cs),
                   const SizedBox(width: 8),
-                  _buildControls(provider),
+                  _buildControls(provider, cs),
                   const SizedBox(width: 8),
-                  _buildVolumeControl(provider),
+                  _buildVolumeControl(provider, cs),
                 ],
               ),
             ),
@@ -55,7 +57,7 @@ class BottomPlayer extends StatelessWidget {
     );
   }
 
-  Widget _buildProgressBar(audio_prov.AudioProvider provider) {
+  Widget _buildProgressBar(audio_prov.AudioProvider provider, ColorScheme cs) {
     return LayoutBuilder(
       builder: (context, constraints) {
         return GestureDetector(
@@ -64,11 +66,11 @@ class BottomPlayer extends StatelessWidget {
           },
           child: Container(
             height: 3,
-            color: VKTheme.primary.withValues(alpha: 0.15),
+            color: cs.primary.withValues(alpha: 0.15),
             child: FractionallySizedBox(
               alignment: Alignment.centerLeft,
               widthFactor: provider.progress,
-              child: Container(color: VKTheme.primary),
+              child: Container(color: cs.primary),
             ),
           ),
         );
@@ -76,7 +78,7 @@ class BottomPlayer extends StatelessWidget {
     );
   }
 
-  Widget _buildTrackInfo(Track track) {
+  Widget _buildTrackInfo(Track track, ColorScheme cs) {
     return Expanded(
       flex: 3,
       child: Row(
@@ -87,12 +89,13 @@ class BottomPlayer extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               image: track.albumArtUrl != null
-                  ? DecorationImage(image: NetworkImage(track.albumArtUrl!), fit: BoxFit.cover)
+                  ? DecorationImage(
+                      image: NetworkImage(track.albumArtUrl!), fit: BoxFit.cover)
                   : null,
-              color: VKTheme.primary.withValues(alpha: 0.15),
+              color: cs.primaryContainer.withValues(alpha: 0.3),
             ),
             child: track.albumArtUrl == null
-                ? const Icon(Icons.music_note, color: VKTheme.primary, size: 22)
+                ? Icon(Icons.music_note, color: cs.onPrimaryContainer, size: 22)
                 : null,
           ),
           const SizedBox(width: 10),
@@ -102,11 +105,15 @@ class BottomPlayer extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(track.title,
-                    style: const TextStyle(color: VKTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w500),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                    style: TextStyle(
+                        color: cs.onSurface, fontSize: 14, fontWeight: FontWeight.w500),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
                 Text(track.artist,
-                    style: const TextStyle(color: VKTheme.textSecondary, fontSize: 12),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                    style: TextStyle(
+                        color: cs.onSurface.withValues(alpha: 0.6), fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
@@ -115,46 +122,61 @@ class BottomPlayer extends StatelessWidget {
     );
   }
 
-  Widget _buildControls(audio_prov.AudioProvider provider) {
+  Widget _buildControls(audio_prov.AudioProvider provider, ColorScheme cs) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
-          icon: Icon(Icons.skip_previous_rounded, color: VKTheme.textPrimary, size: 26),
-          onPressed: provider.previous, padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          icon: Icon(Icons.skip_previous_rounded,
+              color: cs.onSurface, size: 26),
+          onPressed: provider.previous,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
         ),
         Container(
           width: 36,
           height: 36,
-          decoration: const BoxDecoration(shape: BoxShape.circle, color: VKTheme.primary),
+          decoration: BoxDecoration(shape: BoxShape.circle, color: cs.primary),
           child: IconButton(
-            icon: Icon(provider.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 22),
-            onPressed: provider.playPause, padding: EdgeInsets.zero,
+            icon: Icon(
+              provider.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              color: cs.onPrimary,
+              size: 22,
+            ),
+            onPressed: provider.playPause,
+            padding: EdgeInsets.zero,
           ),
         ),
         IconButton(
-          icon: Icon(Icons.skip_next_rounded, color: VKTheme.textPrimary, size: 26),
-          onPressed: provider.next, padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          icon: Icon(Icons.skip_next_rounded,
+              color: cs.onSurface, size: 26),
+          onPressed: provider.next,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
         ),
       ],
     );
   }
 
-  Widget _buildVolumeControl(audio_prov.AudioProvider provider) {
+  Widget _buildVolumeControl(audio_prov.AudioProvider provider, ColorScheme cs) {
     return SizedBox(
       width: 60,
       child: Row(
         children: [
-          Icon(provider.volume == 0 ? Icons.volume_off : Icons.volume_up, color: VKTheme.textHint, size: 16),
+          Icon(
+            provider.volume == 0 ? Icons.volume_off : Icons.volume_up,
+            color: cs.onSurface.withValues(alpha: 0.4),
+            size: 16,
+          ),
           Expanded(
             child: SliderTheme(
               data: SliderThemeData(
                 trackHeight: 3,
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
-                activeTrackColor: VKTheme.primary,
-                inactiveTrackColor: VKTheme.primary.withValues(alpha: 0.15),
-                thumbColor: VKTheme.primary,
+                activeTrackColor: cs.primary,
+                inactiveTrackColor: cs.primary.withValues(alpha: 0.15),
+                thumbColor: cs.primary,
               ),
               child: Slider(value: provider.volume, onChanged: provider.setVolume),
             ),
