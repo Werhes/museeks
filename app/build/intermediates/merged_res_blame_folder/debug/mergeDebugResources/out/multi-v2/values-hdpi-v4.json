@@ -1,0 +1,20 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.werhes.museeks.app-mergeDebugResources-89:/values-hdpi-v4/values-hdpi-v4.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\9394b0cfc43d7b6836a5e6abe3c0f30b\\transformed\\appcompat-1.7.0\\res\\values-hdpi-v4\\values-hdpi-v4.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "6",
+                        "endColumns": "13",
+                        "endOffsets": "327"
+                    }
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include
+        domain="sharedpref"
+        path="."/>
+    <include
+        domain="file"
+        path="vkx_eq_custom.json"/>
+    <include
+        domain="file"
+        path="vkx_last_state.json"/>
+    <include
+        domain="file"
+        path="vkx_metadata.json"/>
+    <include
+        domain="file"
+        path="OrbitSearchHistory.dat"/>
+    <exclude
+        domain="sharedpref"
+        path="__androidx_security_crypto_encrypted_file_pref__.xml"/>
+    <exclude
+        domain="sharedpref"
+        path="spark_blobs.xml"/>
+    <exclude
+        domain="sharedpref"
+        path="vk_api_preferences.xml"/>
+</full-backup-content>

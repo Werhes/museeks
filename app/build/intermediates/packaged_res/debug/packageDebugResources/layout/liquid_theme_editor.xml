@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:orientation="vertical"
+    android:id="@+id/ll_theme_editor_root"
+    android:background="?android:attr/windowBackground"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <TextView
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:gravity="start|center_vertical"
+        android:id="@+id/tv_liquid_editor_title"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:textAlignment="viewStart"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"/>
+    <com.google.android.material.tabs.TabLayout
+        android:layout_gravity="start"
+        android:id="@+id/tl_liquid_editor_tabs"
+        android:background="@null"
+        android:layout_width="match_parent"
+        android:layout_height="42dp"
+        app:tabGravity="fill"
+        app:tabIndicatorColor="?attr/colorAccent"
+        app:tabMode="scrollable"
+        app:tabSelectedTextColor="?attr/colorAccent"/>
+    <androidx.viewpager.widget.ViewPager
+        android:id="@+id/vp_liquid_editor_pager"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
+</LinearLayout>

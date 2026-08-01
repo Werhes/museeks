@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <LinearLayout
+        android:orientation="vertical"
+        android:paddingLeft="16dp"
+        android:paddingTop="7.5dp"
+        android:paddingRight="16dp"
+        android:paddingBottom="18dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <EditText
+            android:textColor="?android:attr/textColorPrimary"
+            android:textColorHint="?android:attr/textColorSecondary"
+            android:id="@+id/title"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:paddingBottom="12.5dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="5dp"
+            android:hint="Generic Auth 1"
+            android:maxLines="3"
+            android:ems="10"
+            android:inputType="textMultiLine"
+            android:autofillHints=""/>
+        <EditText
+            android:textColor="?android:attr/textColorPrimary"
+            android:textColorHint="?android:attr/textColorSecondary"
+            android:id="@+id/subtitle"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:paddingBottom="12.5dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Generic Auth 2"
+            android:maxLines="3"
+            android:ems="10"
+            android:inputType="textMultiLine"
+            android:autofillHints=""/>
+    </LinearLayout>
+</ScrollView>

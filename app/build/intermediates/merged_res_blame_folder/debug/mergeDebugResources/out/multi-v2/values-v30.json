@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.werhes.museeks.app-mergeDebugResources-89:/values-v30/values-v30.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\b2c123bd8be3f5a178dbec352016d9a7\\transformed\\material3-release\\res\\values-v30\\values-v30.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "72",
+                        "endOffsets": "123"
+                    }
+                }
+            ]
+        }
+    ]
+}

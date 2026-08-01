@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Кастомные стили, используемые в layout-файлах VK X -->
+
+    <!-- Button styles -->
+    <style name="ButtonBarButtonStyleM2" parent="Widget.MaterialComponents.Button.TextButton">
+        <item name="android:textColor">?attr/global_accent</item>
+        <item name="rippleColor">?attr/global_accent</item>
+    </style>
+
+    <style name="TextButton.Blue">
+        <item name="android:textColor">?attr/global_accent</item>
+    </style>
+
+    <style name="MusicThemedActionBtn" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="cornerRadius">12dp</item>
+    </style>
+
+    <!-- Text styles -->
+    <style name="TextStyle.ListItem">
+        <item name="android:drawablePadding">4dp</item>
+    </style>
+
+    <style name="TextStyle.ListItem.Title">
+        <item name="android:drawablePadding">2dp</item>
+    </style>
+
+    <!-- Dialog styles -->
+    <style name="V2.Dialog2" parent="Widget.MaterialComponents.CardView">
+        <item name="cardCornerRadius">16dp</item>
+    </style>
+
+    <!-- Toolbar title -->
+    <style name="NewToolbarTitle">
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- Preference fragment -->
+    <style name="PreferenceFragmentListStyle" parent="@style/PreferenceFragment.Material">
+        <item name="android:listViewStyle">@style/PreferenceListViewStyle</item>
+    </style>
+
+    <style name="PreferenceListViewStyle">
+        <item name="android:paddingTop">0dp</item>
+        <item name="android:paddingBottom">0dp</item>
+    </style>
+</resources>
