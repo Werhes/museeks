@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_big"
+    android:minWidth="180dp"
+    android:minHeight="60dp"
+    android:updatePeriodMillis="21600000"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:previewImage="@drawable/vkx_widget_preview_player_small"
+    android:resizeMode="horizontal"
+    android:widgetCategory="home_screen" />

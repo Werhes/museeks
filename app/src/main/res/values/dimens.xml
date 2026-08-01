@@ -7,4 +7,9 @@
 
     <!-- Dialog -->
     <dimen name="dialog_round">16dp</dimen>
+
+    <!-- Glance widget dimensions -->
+    <dimen name="glance_widget_np_width">180dp</dimen>
+    <dimen name="glance_widget_np_min_height">60dp</dimen>
+    <dimen name="glance_widget_np_min_width">120dp</dimen>
 </resources>
