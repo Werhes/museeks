@@ -46,13 +46,4 @@
     <attr name="button_tertiary_foreground" format="reference" />
     <attr name="button_tertiary_foreground_disabled" format="reference" />
 
-    <!-- Card -->
-    <attr name="cardCornerRadius" format="reference" />
-    <attr name="cornerRadius" format="reference" />
-
-    <!-- Colors -->
-    <attr name="colorAccent" format="reference" />
-    <attr name="colorPrimary" format="reference" />
-    <attr name="colorPrimaryDark" format="reference" />
-    <attr name="colorSecondary" format="reference" />
 </resources>
