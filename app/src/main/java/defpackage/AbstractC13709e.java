@@ -1,0 +1,17 @@
+package defpackage;
+
+import sun.misc.Unsafe;
+
+/* compiled from: r8-map-id-a03018653d44f370ce7a671d31c0358eb3f30ef65367264f2a4c1bf16e5cfea3 */
+/* renamed from: eٓؒؔ, reason: invalid class name and case insensitive filesystem */
+/* loaded from: classes3.dex */
+public abstract /* synthetic */ class AbstractC13709e {
+    public static /* synthetic */ boolean ad(Unsafe unsafe, AbstractC0586e abstractC0586e, long j, Object obj, Object obj2) {
+        while (!unsafe.compareAndSwapObject(abstractC0586e, j, obj, obj2)) {
+            if (unsafe.getObject(abstractC0586e, j) != obj) {
+                return false;
+            }
+        }
+        return true;
+    }
+}

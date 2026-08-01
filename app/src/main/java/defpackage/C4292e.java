@@ -1,0 +1,24 @@
+package defpackage;
+
+import kotlin.jvm.functions.Function0;
+
+/* compiled from: r8-map-id-a03018653d44f370ce7a671d31c0358eb3f30ef65367264f2a4c1bf16e5cfea3 */
+/* renamed from: eؖۖٗ, reason: invalid class name and case insensitive filesystem */
+/* loaded from: classes3.dex */
+public final /* synthetic */ class C4292e extends C7460e implements Function0 {
+
+    /* renamed from: eٌٍٚ, reason: contains not printable characters */
+    public static final /* synthetic */ int f9382e = 0;
+
+    static {
+        new C7460e(0, C5438e.class, "<init>", "<init>()V", 0);
+    }
+
+    @Override // kotlin.jvm.functions.Function0
+    public final Object invoke() {
+        C5438e c5438e = new C5438e(0);
+        new AbstractC7185e(2, null);
+        new C11213e(27, new C8436e(c5438e));
+        return c5438e;
+    }
+}

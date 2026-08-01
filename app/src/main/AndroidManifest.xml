@@ -1,17 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.werhes.museeks">
+
+    <uses-sdk
+        android:minSdkVersion="23"
+        android:targetSdkVersion="36" />
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.DISPLAY_AUDIO_EFFECT_CONTROL_PANEL" />
+        </intent>
+        <package android:name="com.vkontakte.android" />
+        <package android:name="com.google.android.projection.gearhead" />
+    </queries>
+
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.wifi"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.bluetooth"
+        android:required="false" />
 
     <application
         android:name=".MuseeksApplication"
@@ -22,6 +63,7 @@
         android:theme="@style/Theme.Museeks"
         tools:targetApi="36">
 
+        <!-- Main Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -32,6 +74,254 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Playback Service -->
+        <service
+            android:name="com.werhes.museeksreborn.playback.service.PlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
+
+        <!-- Media Receiver (headset buttons) -->
+        <receiver
+            android:name="com.werhes.museeks.service.MediaReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.media.AUDIO_BECOMING_NOISY" />
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Downloader Service -->
+        <service
+            android:name="com.werhes.museeks.downloader.service.DownloaderService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- LibVkx Integration Service -->
+        <service
+            android:name="com.werhes.museeks.service.integrations.LibVkxService"
+            android:exported="true"
+            android:foregroundServiceType="specialUse">
+            <intent-filter>
+                <action android:name="bruhcollective.itaysonlab.omnibridge.action.external.DISPLAY_SETTINGS" />
+            </intent-filter>
+        </service>
+
+        <!-- Autostart Launcher -->
+        <receiver
+            android:name="com.werhes.museeks.service.AutostartLauncherService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Shortcut Bridge -->
+        <activity
+            android:name="com.werhes.museeks.activity.ShortcutBridgeActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Museeks" />
+
+        <!-- Cache Migration Service -->
+        <service
+            android:name="com.werhes.museeksreborn.cache.path_migration.DedicatedCacheMigrationService"
+            android:exported="false" />
+
+        <!-- Cache V2 Service -->
+        <service
+            android:name="com.werhes.museeksreborn.cache.v2.DedicatedCacheService"
+            android:exported="false" />
+
+        <!-- Artwork Content Provider -->
+        <provider
+            android:name="com.werhes.museeksreborn.playback.auto.VkxArtworkContentProvider"
+            android:authorities="${applicationId}.artwork"
+            android:exported="false" />
+
+        <!-- Car App Service -->
+        <service
+            android:name="com.werhes.museeksreborn.playback.auto2.VkxCarAppService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.MEDIA" />
+            </intent-filter>
+        </service>
+
+        <!-- Widget: Large Player -->
+        <receiver
+            android:name="com.werhes.museeksreborn.playback.widget.impl.LargePlayerWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_large" />
+        </receiver>
+
+        <!-- Widget: Small Player -->
+        <receiver
+            android:name="com.werhes.museeksreborn.playback.widget.impl.SmallPlayerWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_small" />
+        </receiver>
+
+        <!-- Widget: Recent Context -->
+        <receiver
+            android:name="com.werhes.museeksreborn.playback.widget.impl.RecentPlaybackContextWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_context_small" />
+        </receiver>
+
+        <!-- Widget: Recent Context Medium -->
+        <receiver
+            android:name="com.werhes.museeksreborn.playback.widget.impl.RecentPlaybackContextMediumWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_vknew_medium" />
+        </receiver>
+
+        <!-- Glance Widget: Player -->
+        <receiver
+            android:name="com.werhes.museeksreborn.playback.widget_glance.platform.PlayerGlanceWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_glance_player" />
+        </receiver>
+
+        <!-- Glance Widget: Small Playlists -->
+        <receiver
+            android:name="com.werhes.museeksreborn.playback.widget_glance.platform.SmallPlaylistsGlanceWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_glance_recoms_small" />
+        </receiver>
+
+        <!-- Glance Configuration Activity -->
+        <activity
+            android:name="com.werhes.museeksreborn.playback.widget_glance.player_small.SmallPlayerGlanceConfigurationActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Museeks" />
+
+        <!-- Glance After Upgrade Receiver -->
+        <receiver
+            android:name="com.werhes.museeksreborn.playback.widget_glance.GlanceAfterUpgradeReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Cast Context Provider -->
+        <service
+            android:name="com.werhes.museeksreborn.playback.auto2.VkxCarAppService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.MEDIA" />
+            </intent-filter>
+        </service>
+
+        <!-- TV Entrypoint -->
+        <activity
+            android:name="com.werhes.museeksreborn.playback.auto2.VkxCarAppService"
+            android:exported="true"
+            android:theme="@style/Theme.Museeks">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Firebase Messaging Service -->
+        <service
+            android:name="com.google.firebase.messaging.FirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Firebase Init Provider -->
+        <provider
+            android:name="com.google.firebase.provider.FirebaseInitProvider"
+            android:authorities="${applicationId}.firebaseinitprovider"
+            android:exported="false"
+            tools:replace="android:authorities" />
+
+        <!-- ML Kit Init Provider -->
+        <provider
+            android:name="com.google.mlkit.common.internal.MlKitInitProvider"
+            android:authorities="${applicationId}.mlkitinitprovider"
+            android:exported="false"
+            tools:replace="android:authorities" />
+
+        <!-- File Provider -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths" />
+        </provider>
+
+        <!-- WorkManager Initializer (disabled, using startup) -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:replace="android:authorities">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:replace="android:value" />
+        </provider>
+
+        <!-- Core Startup Initializer -->
+        <provider
+            android:name="com.werhes.museeks.startup.CoreInitializer"
+            android:authorities="${applicationId}.coreinitializer"
+            android:exported="false"
+            tools:replace="android:authorities" />
+
+        <!-- Google Maps API Key (from original VK X) -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyB-5Fw9qYxGJmhGqVqQqQqQqQqQqQqQqQqQ" />
+
+        <!-- Google Cast -->
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="com.werhes.museeksreborn.playback.auto2.VkxCarAppService" />
 
     </application>
 

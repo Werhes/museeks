@@ -1,10 +1,27 @@
 {
     "logs": [
         {
-            "outputFile": "com.werhes.museeks.app-mergeDebugResources-89:/values-v23/values-v23.xml",
+            "outputFile": "com.werhes.museeks.app-mergeDebugResources-84:/values-v23/values-v23.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\dd5e0343b623db4f2c6b9835ed7f67b0\\transformed\\work-runtime-2.7.1\\res\\values-v23\\values-v23.xml",
+                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\1871b20a5e7f0234e7daecb27010e8e7\\transformed\\glance-appwidget-1.1.1\\res\\values-v23\\values-v23.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "55",
+                        "endOffsets": "106"
+                    },
+                    "to": {
+                        "startLines": "4",
+                        "startColumns": "4",
+                        "startOffsets": "184",
+                        "endColumns": "55",
+                        "endOffsets": "235"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\2c6e80b5a962e1f6fc8268fb899beeaa\\transformed\\work-runtime-2.10.0\\res\\values-v23\\values-v23.xml",
                     "from": {
                         "startLines": "2,3",
                         "startColumns": "4,4",
@@ -14,26 +31,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\9394b0cfc43d7b6836a5e6abe3c0f30b\\transformed\\appcompat-1.7.0\\res\\values-v23\\values-v23.xml",
-                    "from": {
-                        "startLines": "2,3,4,5,6,20,34,35,36,39,43,44,45,46",
-                        "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4",
-                        "startOffsets": "55,190,325,400,487,1225,1975,2094,2221,2443,2667,2782,2889,3002",
-                        "endLines": "2,3,4,5,19,33,34,35,38,42,43,44,45,49",
-                        "endColumns": "134,134,74,86,12,12,118,126,12,12,114,106,112,12",
-                        "endOffsets": "185,320,395,482,1220,1970,2089,2216,2438,2662,2777,2884,2997,3227"
-                    },
-                    "to": {
-                        "startLines": "5,6,7,8,9,23,37,38,39,42,46,47,48,49",
-                        "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4",
-                        "startOffsets": "240,375,510,585,672,1410,2160,2279,2406,2628,2852,2967,3074,3187",
-                        "endLines": "5,6,7,8,22,36,37,38,41,45,46,47,48,52",
-                        "endColumns": "134,134,74,86,12,12,118,126,12,12,114,106,112,12",
-                        "endOffsets": "370,505,580,667,1405,2155,2274,2401,2623,2847,2962,3069,3182,3412"
-                    }
-                },
-                {
-                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\2136d83721719e4f8b0baa46b5118c7b\\transformed\\cardview-1.0.0\\res\\values-v23\\values-v23.xml",
+                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\7fb4b2237382eec2c8dd840f7cdb908e\\transformed\\cardview-1.0.0\\res\\values-v23\\values-v23.xml",
                     "from": {
                         "startLines": "2",
                         "startColumns": "4",
@@ -52,24 +50,26 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\8a7a4e271965109cd2ad0056cb0d46f1\\transformed\\glance-appwidget-1.1.1\\res\\values-v23\\values-v23.xml",
+                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\ab367a261c8372d23ab2950a463baf19\\transformed\\appcompat-1.7.0\\res\\values-v23\\values-v23.xml",
                     "from": {
-                        "startLines": "2",
-                        "startColumns": "4",
-                        "startOffsets": "55",
-                        "endColumns": "55",
-                        "endOffsets": "106"
+                        "startLines": "2,3,4,5,6,20,34,35,36,39,43,44,45,46",
+                        "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,190,325,400,487,1225,1975,2094,2221,2443,2667,2782,2889,3002",
+                        "endLines": "2,3,4,5,19,33,34,35,38,42,43,44,45,49",
+                        "endColumns": "134,134,74,86,12,12,118,126,12,12,114,106,112,12",
+                        "endOffsets": "185,320,395,482,1220,1970,2089,2216,2438,2662,2777,2884,2997,3227"
                     },
                     "to": {
-                        "startLines": "4",
-                        "startColumns": "4",
-                        "startOffsets": "184",
-                        "endColumns": "55",
-                        "endOffsets": "235"
+                        "startLines": "5,6,7,8,9,23,37,38,39,42,46,47,48,49",
+                        "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "240,375,510,585,672,1410,2160,2279,2406,2628,2852,2967,3074,3187",
+                        "endLines": "5,6,7,8,22,36,37,38,41,45,46,47,48,52",
+                        "endColumns": "134,134,74,86,12,12,118,126,12,12,114,106,112,12",
+                        "endOffsets": "370,505,580,667,1405,2155,2274,2401,2623,2847,2962,3069,3182,3412"
                     }
                 },
                 {
-                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\fa5d46411a7957e402b4c51fd663da1b\\transformed\\material-1.12.0\\res\\values-v23\\values-v23.xml",
+                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\cffdfee324c6c19848a17353c0e97893\\transformed\\material-1.12.0\\res\\values-v23\\values-v23.xml",
                     "from": {
                         "startLines": "2,5,9,13,16,19,22,25,28,32",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4",

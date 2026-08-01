@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.werhes.museeks.app-mergeDebugResources-89:/values-sw360dp-v13/values-sw360dp-v13.xml",
+            "outputFile": "com.werhes.museeks.app-mergeDebugResources-84:/values-sw360dp-v13/values-sw360dp-v13.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\7fe2d9fee2fc8d572ae31d2605e851a5\\transformed\\preference-1.2.1\\res\\values-sw360dp-v13\\values-sw360dp-v13.xml",
+                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\f42aaafd1c3c056d8f401feac2bae8de\\transformed\\preference-1.2.1\\res\\values-sw360dp-v13\\values-sw360dp-v13.xml",
                     "from": {
                         "startLines": "2",
                         "startColumns": "4",

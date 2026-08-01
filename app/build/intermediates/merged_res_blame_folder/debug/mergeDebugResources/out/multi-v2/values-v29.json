@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.werhes.museeks.app-mergeDebugResources-89:/values-v29/values-v29.xml",
+            "outputFile": "com.werhes.museeks.app-mergeDebugResources-84:/values-v29/values-v29.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\8a7a4e271965109cd2ad0056cb0d46f1\\transformed\\glance-appwidget-1.1.1\\res\\values-v29\\values-v29.xml",
+                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\1871b20a5e7f0234e7daecb27010e8e7\\transformed\\glance-appwidget-1.1.1\\res\\values-v29\\values-v29.xml",
                     "from": {
                         "startLines": "2,5,19,22,25,26,27",
                         "startColumns": "4,4,4,4,4,4,4",

@@ -1,0 +1,46 @@
+package defpackage;
+
+import kotlin.Metadata;
+
+/* JADX INFO: Access modifiers changed from: package-private */
+/* compiled from: r8-map-id-a03018653d44f370ce7a671d31c0358eb3f30ef65367264f2a4c1bf16e5cfea3 */
+@Metadata(d1 = {"\u0000\u000e\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0000\b\u0002\u0018\u00002\b\u0012\u0004\u0012\u00020\u00020\u0001¨\u0006\u0003"}, d2 = {"Leَؔۖ;", "Leِٝؓ;", "Leٔۦۡ;", "foundation"}, k = 1, mv = {2, 1, 0}, xi = 48)
+/* renamed from: eَؔۖ, reason: invalid class name and case insensitive filesystem */
+/* loaded from: classes.dex */
+public final class C2776e extends AbstractC11865e {
+
+    /* renamed from: eّٖۦ, reason: contains not printable characters */
+    public final C15274e f6688e;
+
+    public C2776e(C15274e c15274e) {
+        this.f6688e = c15274e;
+    }
+
+    public final boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj instanceof C2776e) {
+            return AbstractC7890e.billing(this.f6688e, ((C2776e) obj).f6688e);
+        }
+        return false;
+    }
+
+    public final int hashCode() {
+        C15274e c15274e = this.f6688e;
+        if (c15274e != null) {
+            return c15274e.hashCode();
+        }
+        return 0;
+    }
+
+    @Override // defpackage.AbstractC11865e
+    public final AbstractC13616e vip() {
+        return new C15108e(this.f6688e, (C13031e) null, 6);
+    }
+
+    @Override // defpackage.AbstractC11865e
+    public final void yandex(AbstractC13616e abstractC13616e) {
+        ((C15108e) abstractC13616e).m3920e(this.f6688e);
+    }
+}

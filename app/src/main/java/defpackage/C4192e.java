@@ -1,0 +1,20 @@
+package defpackage;
+
+/* compiled from: r8-map-id-a03018653d44f370ce7a671d31c0358eb3f30ef65367264f2a4c1bf16e5cfea3 */
+/* renamed from: eؖٙۥ, reason: invalid class name and case insensitive filesystem */
+/* loaded from: classes.dex */
+public final class C4192e implements InterfaceC3851e {
+    public static final C4192e ad = new Object();
+
+    public final boolean equals(Object obj) {
+        return this == obj || (obj instanceof C4192e);
+    }
+
+    public final int hashCode() {
+        return 1411227159;
+    }
+
+    public final String toString() {
+        return "TransferInProgress";
+    }
+}

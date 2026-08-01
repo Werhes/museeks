@@ -1,0 +1,40 @@
+package defpackage;
+
+/* compiled from: r8-map-id-a03018653d44f370ce7a671d31c0358eb3f30ef65367264f2a4c1bf16e5cfea3 */
+/* renamed from: eؖۘۨ, reason: invalid class name and case insensitive filesystem */
+/* loaded from: classes3.dex */
+public final class C4339e implements InterfaceC15313e {
+    public final EnumC11043e ad;
+    public final boolean metrica;
+    public final boolean vip;
+
+    public C4339e(EnumC11043e enumC11043e, boolean z, boolean z2) {
+        this.ad = enumC11043e;
+        this.vip = z;
+        this.metrica = z2;
+    }
+
+    public final boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (!(obj instanceof C4339e)) {
+            return false;
+        }
+        C4339e c4339e = (C4339e) obj;
+        return this.ad == c4339e.ad && this.vip == c4339e.vip && this.metrica == c4339e.metrica;
+    }
+
+    public final int hashCode() {
+        return (((this.ad.hashCode() * 31) + (this.vip ? 1231 : 1237)) * 31) + (this.metrica ? 1231 : 1237);
+    }
+
+    public final String toString() {
+        StringBuilder sb = new StringBuilder("ListPropertyType(storageType=");
+        sb.append(this.ad);
+        sb.append(", isNullable=");
+        sb.append(this.vip);
+        sb.append(", isComputed=");
+        return AbstractC8703e.signatures(sb, this.metrica, ")");
+    }
+}

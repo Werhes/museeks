@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.werhes.museeks.app-mergeDebugResources-89:/values-sw720dp-v13/values-sw720dp-v13.xml",
+            "outputFile": "com.werhes.museeks.app-mergeDebugResources-84:/values-sw720dp-v13/values-sw720dp-v13.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\fe68e2d3e101aa94a7d69f60f9dcfef1\\transformed\\mediarouter-1.7.0\\res\\values-sw720dp-v13\\values-sw720dp-v13.xml",
+                    "source": "C:\\Users\\Werhes\\.gradle\\caches\\transforms-4\\b54c24b4c351574cd1f58b0a74bb0115\\transformed\\mediarouter-1.7.0\\res\\values-sw720dp-v13\\values-sw720dp-v13.xml",
                     "from": {
                         "startLines": "2,3",
                         "startColumns": "4,4",
