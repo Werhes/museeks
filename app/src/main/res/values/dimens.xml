@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- VKUI corner radius -->
+    <dimen name="vkx_corner_radius">8dp</dimen>
+    <dimen name="vkui_button_corner_radius">8dp</dimen>
+    <dimen name="vkui_button_corner_big_radius">12dp</dimen>
+
+    <!-- Dialog -->
+    <dimen name="dialog_round">16dp</dimen>
+</resources>

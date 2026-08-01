@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Splash screen -->
+    <attr name="postSplashScreenTheme" format="reference" />
+    <attr name="windowSplashScreenAnimatedIcon" format="reference" />
+    <attr name="windowSplashScreenBackground" format="reference" />
+    <attr name="splashScreenIconSize" format="dimension" />
+
+    <!-- Text colors -->
+    <attr name="text_primary" format="reference" />
+    <attr name="text_secondary" format="reference" />
+    <attr name="text_inverse" format="reference" />
+    <attr name="textColorAlertDialogListItem" format="reference" />
+
+    <!-- Backgrounds -->
+    <attr name="bg_primary" format="reference" />
+    <attr name="bg_page" format="reference" />
+    <attr name="alert_background" format="reference" />
+    <attr name="blur_darkening_color" format="reference" />
+    <attr name="bottomsheet_background_color" format="reference" />
+    <attr name="bottomsheet_seperator_color" format="reference" />
+    <attr name="scrim_color" format="reference" />
+    <attr name="scrim_color_lighter" format="reference" />
+    <attr name="pref_card_bg" format="reference" />
+    <attr name="reborn_title_color" format="reference" />
+
+    <!-- Accent -->
+    <attr name="global_accent" format="reference" />
+
+    <!-- Alert -->
+    <attr name="alertDialogTheme" format="reference" />
+
+    <!-- Separator alpha for ripple -->
+    <attr name="separator_alpha" format="reference" />
+
+    <!-- Buttons -->
+    <attr name="buttonBarNeutralButtonStyle" format="reference" />
+    <attr name="buttonBarPositiveButtonStyle" format="reference" />
+    <attr name="button_primary_background" format="reference" />
+    <attr name="button_primary_background_disabled" format="reference" />
+    <attr name="button_secondary_background" format="reference" />
+    <attr name="button_secondary_background_disabled" format="reference" />
+    <attr name="button_secondary_foreground" format="reference" />
+    <attr name="button_secondary_foreground_disabled" format="reference" />
+    <attr name="button_tertiary_background_disabled" format="reference" />
+    <attr name="button_tertiary_foreground" format="reference" />
+    <attr name="button_tertiary_foreground_disabled" format="reference" />
+
+    <!-- Card -->
+    <attr name="cardCornerRadius" format="reference" />
+    <attr name="cornerRadius" format="reference" />
+
+    <!-- Colors -->
+    <attr name="colorAccent" format="reference" />
+    <attr name="colorPrimary" format="reference" />
+    <attr name="colorPrimaryDark" format="reference" />
+    <attr name="colorSecondary" format="reference" />
+</resources>
