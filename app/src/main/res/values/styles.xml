@@ -66,4 +66,15 @@
         <item name="android:paddingTop">0dp</item>
         <item name="android:paddingBottom">0dp</item>
     </style>
+
+    <!-- Preference text styles (used in preference layouts) -->
+    <style name="PreferenceSummaryTextStyle" parent="TextAppearance.MaterialComponents.Body2">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">?android:attr/textColorSecondary</item>
+    </style>
+
+    <style name="PreferenceCategoryTitleTextStyle" parent="TextAppearance.MaterialComponents.Subtitle2">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">?attr/global_accent</item>
+    </style>
 </resources>
