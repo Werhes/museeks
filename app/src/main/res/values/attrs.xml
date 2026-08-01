@@ -10,7 +10,6 @@
     <attr name="text_primary" format="reference" />
     <attr name="text_secondary" format="reference" />
     <attr name="text_inverse" format="reference" />
-    <attr name="textColorAlertDialogListItem" format="reference" />
 
     <!-- Backgrounds -->
     <attr name="bg_primary" format="reference" />
@@ -27,15 +26,10 @@
     <!-- Accent -->
     <attr name="global_accent" format="reference" />
 
-    <!-- Alert -->
-    <attr name="alertDialogTheme" format="reference" />
-
     <!-- Separator alpha for ripple -->
     <attr name="separator_alpha" format="reference" />
 
     <!-- Buttons -->
-    <attr name="buttonBarNeutralButtonStyle" format="reference" />
-    <attr name="buttonBarPositiveButtonStyle" format="reference" />
     <attr name="button_primary_background" format="reference" />
     <attr name="button_primary_background_disabled" format="reference" />
     <attr name="button_secondary_background" format="reference" />
