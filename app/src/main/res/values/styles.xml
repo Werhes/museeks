@@ -8,6 +8,11 @@
         <item name="rippleColor">?attr/global_accent</item>
     </style>
 
+    <!-- Base TextButton style (used as @style/TextButton in layouts) -->
+    <style name="TextButton" parent="Widget.MaterialComponents.Button.TextButton">
+        <item name="android:textColor">?attr/global_accent</item>
+    </style>
+
     <style name="TextButton.Blue">
         <item name="android:textColor">?attr/global_accent</item>
     </style>
@@ -16,13 +21,29 @@
         <item name="cornerRadius">12dp</item>
     </style>
 
-    <!-- Text styles -->
+    <!-- Base TextStyle (used as @style/TextStyle in layouts) -->
+    <style name="TextStyle">
+        <item name="android:drawablePadding">4dp</item>
+    </style>
+
     <style name="TextStyle.ListItem">
         <item name="android:drawablePadding">4dp</item>
     </style>
 
     <style name="TextStyle.ListItem.Title">
         <item name="android:drawablePadding">2dp</item>
+    </style>
+
+    <style name="TextStyle.ListItem.TitleLarge">
+        <item name="android:drawablePadding">2dp</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextStyle.ListItem.Snippet">
+        <item name="android:drawablePadding">2dp</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">?attr/text_secondary</item>
     </style>
 
     <!-- Dialog styles -->
