@@ -79,6 +79,10 @@
     </style>
 
     <!-- VKUI Text styles -->
+    <style name="VKUIText">
+        <item name="android:drawablePadding">4dp</item>
+    </style>
+
     <style name="VKUIText.Title1">
         <item name="android:textSize">20sp</item>
         <item name="android:textStyle">bold</item>
