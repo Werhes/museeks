@@ -12,4 +12,10 @@
     <dimen name="glance_widget_np_width">180dp</dimen>
     <dimen name="glance_widget_np_min_height">60dp</dimen>
     <dimen name="glance_widget_np_min_width">120dp</dimen>
+
+    <!-- Artist header -->
+    <dimen name="artist_header_height_v2">200dp</dimen>
+
+    <!-- Post/padding -->
+    <dimen name="post_side_padding">16dp</dimen>
 </resources>
