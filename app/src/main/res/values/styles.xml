@@ -119,4 +119,14 @@
     <style name="MusicWhiteActionBtn" parent="Widget.MaterialComponents.Button.TextButton">
         <item name="android:textColor">@android:color/white</item>
     </style>
+
+    <!-- VKUI EditText Modified -->
+    <style name="VKUIEditTextModified" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+        <item name="boxStrokeWidth">1dp</item>
+        <item name="boxStrokeWidthFocused">2dp</item>
+        <item name="boxCornerRadiusTopStart">8dp</item>
+        <item name="boxCornerRadiusTopEnd">8dp</item>
+        <item name="boxCornerRadiusBottomStart">8dp</item>
+        <item name="boxCornerRadiusBottomEnd">8dp</item>
+    </style>
 </resources>
