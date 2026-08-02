@@ -97,16 +97,6 @@ dependencies {
     implementation("androidx.media3:media3-session:1.5.1")
     implementation("androidx.media3:media3-common:1.5.1")
 
-    // MediaRouter (Cast)
-    implementation("androidx.mediarouter:mediarouter:1.7.0")
-    implementation("com.google.android.gms:play-services-cast-framework:22.0.0")
-// Glance (Widgets)
-implementation("androidx.glance:glance-appwidget:1.1.1")
-
-// Android Auto (Car App)
-implementation("androidx.car.app:app:1.8.0-alpha03")
-
-
     // Networking
     implementation("io.ktor:ktor-client-android:3.0.3")
     implementation("io.ktor:ktor-client-core:3.0.3")
@@ -141,10 +131,4 @@ implementation("androidx.car.app:app:1.8.0-alpha03")
 
     // ViewPager2
     implementation("androidx.viewpager2:viewpager2:1.1.0")
-
-    // Compose (only for now_playing bottom sheet)
-    implementation("androidx.compose.ui:ui:1.7.6")
-    implementation("androidx.compose.foundation:foundation:1.7.6")
-    implementation("androidx.compose.material3:material3:1.3.1")
-    implementation("androidx.activity:activity-compose:1.9.3")
 }
