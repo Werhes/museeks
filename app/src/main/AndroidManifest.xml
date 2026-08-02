@@ -48,64 +48,6 @@
             </intent-filter>
         </service>
 
-        <!-- Media Receiver (headset buttons) -->
-        <receiver
-            android:name="com.werhes.museeks.service.MediaReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.media.AUDIO_BECOMING_NOISY" />
-                <action android:name="android.intent.action.MEDIA_BUTTON" />
-            </intent-filter>
-        </receiver>
-
-        <!-- Widget: Large Player -->
-        <receiver
-            android:name="com.werhes.museeksreborn.playback.widget.impl.LargePlayerWidget"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_large" />
-        </receiver>
-
-        <!-- Widget: Small Player -->
-        <receiver
-            android:name="com.werhes.museeksreborn.playback.widget.impl.SmallPlayerWidget"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_small" />
-        </receiver>
-
-        <!-- Widget: Recent Context -->
-        <receiver
-            android:name="com.werhes.museeksreborn.playback.widget.impl.RecentPlaybackContextWidget"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_context_small" />
-        </receiver>
-
-        <!-- Widget: Recent Context Medium -->
-        <receiver
-            android:name="com.werhes.museeksreborn.playback.widget.impl.RecentPlaybackContextMediumWidget"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_vknew_medium" />
-        </receiver>
-
         <!-- File Provider -->
         <provider
             android:name="androidx.core.content.FileProvider"
