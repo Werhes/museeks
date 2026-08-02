@@ -88,6 +88,10 @@ dependencies {
     // Fragment
     implementation("androidx.fragment:fragment-ktx:1.8.5")
 
+    // Navigation
+    implementation("androidx.navigation:navigation-fragment-ktx:2.8.5")
+    implementation("androidx.navigation:navigation-ui-ktx:2.8.5")
+
     // Media3 (ExoPlayer)
     implementation("androidx.media3:media3-exoplayer:1.5.1")
     implementation("androidx.media3:media3-session:1.5.1")
@@ -96,9 +100,12 @@ dependencies {
     // MediaRouter (Cast)
     implementation("androidx.mediarouter:mediarouter:1.7.0")
     implementation("com.google.android.gms:play-services-cast-framework:22.0.0")
+// Glance (Widgets)
+implementation("androidx.glance:glance-appwidget:1.1.1")
 
-    // Glance (Widgets)
-    implementation("androidx.glance:glance-appwidget:1.1.1")
+// Android Auto (Car App)
+implementation("androidx.car.app:app:1.8.0-alpha03")
+
 
     // Networking
     implementation("io.ktor:ktor-client-android:3.0.3")

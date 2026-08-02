@@ -77,7 +77,7 @@
 
         <!-- Playback Service -->
         <service
-            android:name="com.werhes.museeksreborn.playback.service.PlaybackService"
+            android:name=".service.PlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
@@ -240,25 +240,9 @@
         </receiver>
 
         <!-- Cast Context Provider -->
-        <service
-            android:name="com.werhes.museeksreborn.playback.auto2.VkxCarAppService"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="androidx.car.app.CarAppService" />
-                <category android:name="androidx.car.app.category.MEDIA" />
-            </intent-filter>
-        </service>
-
-        <!-- TV Entrypoint -->
-        <activity
-            android:name="com.werhes.museeksreborn.playback.auto2.VkxCarAppService"
-            android:exported="true"
-            android:theme="@style/Theme.Museeks">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-            </intent-filter>
-        </activity>
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="com.werhes.museeksreborn.playback.auto.VkxCastContextProvider" />
 
         <!-- Firebase Messaging Service -->
         <service
@@ -317,11 +301,6 @@
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyB-5Fw9qYxGJmhGqVqQqQqQqQqQqQqQqQqQ" />
-
-        <!-- Google Cast -->
-        <meta-data
-            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
-            android:value="com.werhes.museeksreborn.playback.auto2.VkxCarAppService" />
 
     </application>
 
