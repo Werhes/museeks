@@ -7,9 +7,6 @@
         <item name="colorAccent">@color/sky_300</item>
         <item name="colorSecondary">@color/sky_300</item>
 
-        <!-- VK Sans шрифт по умолчанию -->
-        <item name="android:fontFamily">@font/vksansdisplay_regular</item>
-
         <!-- Custom VK X attributes -->
         <item name="text_primary">@color/primary_text_default_material_light</item>
         <item name="text_secondary">@color/secondary_text_default_material_light</item>
