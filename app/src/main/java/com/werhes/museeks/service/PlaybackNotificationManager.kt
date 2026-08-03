@@ -11,7 +11,6 @@ import android.graphics.drawable.Drawable
 import androidx.core.app.NotificationCompat
 import androidx.media3.common.Player
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
 import com.werhes.museeks.MainActivity
 import com.werhes.museeks.R
 import com.werhes.museeks.api.model.music.AudioTrack
@@ -75,13 +74,9 @@ class PlaybackMediaNotificationCallback(
     fun onUpdateNotification(
         mediaSession: MediaSession,
         startInForeground: Boolean
-    ): MediaSessionService.MediaNotification {
+    ): android.app.Notification {
         val player = mediaSession.player
-        val notification = buildNotification(player)
-        return MediaSessionService.MediaNotification(
-            PlaybackNotificationManager.NOTIFICATION_ID,
-            notification
-        )
+        return buildNotification(player)
     }
 
     private fun buildNotification(player: Player?): android.app.Notification {

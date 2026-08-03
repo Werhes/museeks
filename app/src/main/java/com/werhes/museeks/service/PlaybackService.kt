@@ -74,7 +74,11 @@ class PlaybackService : MediaSessionService() {
         mediaSession: MediaSession,
         startInForeground: Boolean
     ): MediaNotification {
-        return notificationCallback.onUpdateNotification(mediaSession, startInForeground)
+        val notification = notificationCallback.onUpdateNotification(mediaSession, startInForeground)
+        return MediaNotification(
+            PlaybackNotificationManager.NOTIFICATION_ID,
+            notification
+        )
     }
 
     companion object {
