@@ -1,10 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-
-    <uses-sdk
-        android:minSdkVersion="23"
-        android:targetSdkVersion="36" />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -13,9 +8,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:name=".MuseeksApplication"
@@ -24,13 +16,11 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Museeks"
-        tools:targetApi="36">
+        android:networkSecurityConfig="@xml/nsc">
 
-        <!-- Main Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTask"
             android:theme="@style/Theme.Museeks">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -38,7 +28,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Playback Service -->
         <service
             android:name=".service.PlaybackService"
             android:exported="false"
@@ -48,7 +37,14 @@
             </intent-filter>
         </service>
 
-        <!-- File Provider -->
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

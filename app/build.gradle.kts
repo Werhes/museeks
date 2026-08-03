@@ -108,7 +108,6 @@ dependencies {
     // Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("com.google.code.gson:gson:2.11.0")
-    implementation("com.squareup.moshi:moshi-kotlin:1.15.2")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")

@@ -18,4 +18,7 @@
 
     <!-- Post/padding -->
     <dimen name="post_side_padding">16dp</dimen>
+
+    <!-- Dock navigation -->
+    <dimen name="dock_height">72dp</dimen>
 </resources>

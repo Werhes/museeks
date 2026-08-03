@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/bg_page"
+    android:orientation="vertical">
+
+    <!-- Toolbar поиска (используем vkxui_toolbar стиль) -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="?attr/bg_header">
+
+        <EditText
+            android:id="@+id/search_input"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginStart="48dp"
+            android:layout_marginEnd="16dp"
+            android:background="@null"
+            android:hint="@string/search_hint_2"
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            android:maxLines="1"
+            android:singleLine="true"
+            android:textColor="?android:attr/textColorPrimary"
+            android:textColorHint="?android:attr/textColorHint"
+            android:textSize="16sp" />
+
+        <ImageButton
+            android:id="@+id/search_back"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center_vertical"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="12dp"
+            android:src="@drawable/ic_chevron_left_24"
+            android:contentDescription="@string/back" />
+    </FrameLayout>
+
+    <!-- Контейнер для предложений (история, популярное) -->
+    <FrameLayout
+        android:id="@+id/search_suggestions"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:visibility="visible">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/search_suggestions_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingTop="8dp" />
+    </FrameLayout>
+
+    <!-- Результаты поиска -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/search_results"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:visibility="gone" />
+
+    <!-- Пустое состояние -->
+    <FrameLayout
+        android:id="@+id/search_empty"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:text="@string/search_empty"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="16sp" />
+    </FrameLayout>
+
+</LinearLayout>

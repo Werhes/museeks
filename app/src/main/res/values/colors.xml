@@ -452,4 +452,10 @@
     <color name="tooltip_background_light">#e6ffffff</color>
     <color name="vk_white_alpha12">#1fffffff</color>
     <color name="white">#ffffff</color>
+
+    <!-- Dock navigation colors -->
+    <color name="dock_icon_selected">#ff71aaeb</color>
+    <color name="dock_icon_default">#8a000000</color>
+    <color name="dock_label_selected">#ff71aaeb</color>
+    <color name="dock_label_default">#8a000000</color>
 </resources>

@@ -2250,4 +2250,20 @@
     <string name="xf_sett_zh_summary">use if VK is blocked in your country</string>
     <string name="xf_use">Use</string>
     <string name="yesterday">yesterday</string>
+
+    <!-- Museeks notification strings -->
+    <string name="notification_channel_name">Now Playing</string>
+    <string name="notification_channel_description">Playback controls and track information</string>
+    <string name="unknown_track">Unknown Track</string>
+    <string name="unknown_artist">Unknown Artist</string>
+
+    <!-- Museeks UI strings -->
+    <string name="search_empty">Ничего не найдено</string>
+    <string name="library_empty">Ваша библиотека пуста</string>
+    <string name="profile_login_prompt">Войдите, чтобы увидеть свой профиль</string>
+    <string name="profile_tracks">Треки</string>
+    <string name="profile_playlists">Плейлисты</string>
+    <string name="profile_friends">Друзья</string>
+    <string name="login">Войти</string>
+    <string name="back">Назад</string>
 </resources>
