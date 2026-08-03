@@ -8,22 +8,15 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import androidx.annotation.OptIn
 import androidx.core.app.NotificationCompat
 import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.werhes.museeks.MainActivity
 import com.werhes.museeks.R
 import com.werhes.museeks.api.model.music.AudioTrack
-import coil.Coil
-import coil.request.ImageRequest
-import coil.target.Target
-import com.google.common.util.concurrent.ListenableFuture
-import com.google.common.util.concurrent.SettableFuture
+import kotlinx.coroutines.runBlocking
 
-@OptIn(UnstableApi::class)
 class PlaybackNotificationManager(
     private val context: Context,
     private val mediaSession: MediaSession
@@ -37,7 +30,6 @@ class PlaybackNotificationManager(
     fun start() {
         if (!notificationShown) {
             notificationShown = true
-            // MediaSessionService сам управляет уведомлением через onUpdateNotification
         }
     }
 
@@ -77,18 +69,19 @@ class PlaybackNotificationManager(
 /**
  * Callback для MediaSessionService, который предоставляет уведомление.
  */
-@OptIn(UnstableApi::class)
 class PlaybackMediaNotificationCallback(
     private val context: Context
-) : MediaSessionService.MediaNotification {
-
-    override fun onUpdateNotification(
+) {
+    fun onUpdateNotification(
         mediaSession: MediaSession,
         startInForeground: Boolean
     ): MediaSessionService.MediaNotification {
         val player = mediaSession.player
         val notification = buildNotification(player)
-        return MediaSessionService.MediaNotification(NOTIFICATION_ID, notification)
+        return MediaSessionService.MediaNotification(
+            PlaybackNotificationManager.NOTIFICATION_ID,
+            notification
+        )
     }
 
     private fun buildNotification(player: Player?): android.app.Notification {
@@ -149,14 +142,17 @@ class PlaybackMediaNotificationCallback(
     }
 
     private fun loadBitmapSync(url: String): Bitmap? {
-        try {
-            val request = ImageRequest.Builder(context)
+        return try {
+            val request = coil.request.ImageRequest.Builder(context)
                 .data(url)
                 .allowHardware(false)
                 .build()
-            return Coil.imageLoader(context).execute(request).drawable?.toBitmap()
+            val result = runBlocking {
+                coil.Coil.imageLoader(context).execute(request)
+            }
+            result.drawable?.toBitmap()
         } catch (e: Exception) {
-            return null
+            null
         }
     }
 }
@@ -165,7 +161,11 @@ private fun Drawable.toBitmap(): Bitmap {
     if (this is BitmapDrawable) {
         return bitmap
     }
-    val bitmap = Bitmap.createBitmap(intrinsicWidth.coerceAtLeast(1), intrinsicHeight.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+    val bitmap = Bitmap.createBitmap(
+        intrinsicWidth.coerceAtLeast(1),
+        intrinsicHeight.coerceAtLeast(1),
+        Bitmap.Config.ARGB_8888
+    )
     val canvas = android.graphics.Canvas(bitmap)
     setBounds(0, 0, canvas.width, canvas.height)
     draw(canvas)

@@ -201,12 +201,7 @@ class PlayerManager(private val context: Context) {
 
     private fun updateMediaSessionMetadata() {
         val track = queue.currentTrack ?: return
-        exoPlayer.setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle(track.title)
-                .setArtist(track.artist)
-                .setArtworkUri(track.getAlbumArtUrl()?.let { android.net.Uri.parse(it) })
-                .build()
-        )
+        // Метаданные уже установлены через MediaItem.Builder при построении трека
+        // Дополнительно можно обновить через MediaSession, если нужно
     }
 }
