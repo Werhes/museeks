@@ -2,11 +2,12 @@
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:layout_marginTop="8dp"
     android:layout_marginStart="16dp"
     android:layout_marginEnd="16dp">
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="155dp">
+        android:layout_height="100dp">
         <ImageView
             android:id="@+id/banner_bg"
             android:layout_width="match_parent"
@@ -24,7 +25,7 @@
             android:paddingTop="16dp"
             android:paddingBottom="16dp"
             android:layout_width="match_parent"
-            android:layout_height="155dp"
+            android:layout_height="match_parent"
             android:layout_marginStart="21dp"
             android:layout_marginEnd="21dp">
             <TextView
@@ -43,16 +44,6 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 style="@style/TextStyle"/>
-            <com.google.android.material.button.MaterialButton
-                android:textColor="@color/google_black"
-                android:id="@+id/action"
-                android:layout_width="wrap_content"
-                android:layout_height="56dp"
-                android:layout_marginTop="8dp"
-                android:backgroundTint="@color/white"
-                app:rippleColor="@color/google_black"
-                app:strokeWidth="0dp"
-                style="@style/MusicThemedActionBtn"/>
         </LinearLayout>
     </FrameLayout>
 </com.google.android.material.card.MaterialCardView>
