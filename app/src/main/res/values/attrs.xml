@@ -40,4 +40,13 @@
     <attr name="button_tertiary_foreground" format="reference" />
     <attr name="button_tertiary_foreground_disabled" format="reference" />
 
+    <!-- Layout attributes -->
+    <attr name="bg_header" format="reference" />
+    <attr name="colorAccent" format="reference" />
+    <attr name="colorError" format="reference" />
+    <attr name="dialogPreferredPadding" format="dimension" />
+    <attr name="listPreferredItemHeightSmall" format="dimension" />
+    <attr name="textAppearanceListItem" format="reference" />
+    <attr name="actionBarSize" format="dimension" />
+
 </resources>

@@ -49,5 +49,12 @@
 
         <!-- Text colors for dialogs -->
         <item name="textColorAlertDialogListItem">@color/primary_text_default_material_light</item>
+
+        <!-- Layout attributes -->
+        <item name="bg_header">@color/background_floating_material_light</item>
+        <item name="dialogPreferredPadding">24dp</item>
+        <item name="listPreferredItemHeightSmall">48dp</item>
+        <item name="textAppearanceListItem">@style/TextAppearance.MaterialComponents.Body1</item>
+        <item name="actionBarSize">56dp</item>
     </style>
 </resources>
