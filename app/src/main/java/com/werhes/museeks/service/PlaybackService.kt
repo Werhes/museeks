@@ -1,5 +1,7 @@
 package com.werhes.museeks.service
 
+import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
@@ -12,6 +14,7 @@ class PlaybackService : MediaSessionService() {
 
     private lateinit var mediaSession: MediaSession
     private lateinit var notificationManager: PlaybackNotificationManager
+    private lateinit var notificationCallback: PlaybackMediaNotificationCallback
 
     override fun onCreate() {
         super.onCreate()
@@ -23,12 +26,33 @@ class PlaybackService : MediaSessionService() {
             .setSessionActivity(PlaybackNotificationManager.createMainActivityPendingIntent(this))
             .build()
 
+        notificationCallback = PlaybackMediaNotificationCallback(this)
         notificationManager = PlaybackNotificationManager(this, mediaSession)
         notificationManager.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
+
+        when (intent?.action) {
+            ACTION_PLAY -> {
+                val app = application as MuseeksApplication
+                app.playerManager.resume()
+            }
+            ACTION_PAUSE -> {
+                val app = application as MuseeksApplication
+                app.playerManager.pause()
+            }
+            ACTION_NEXT -> {
+                val app = application as MuseeksApplication
+                app.playerManager.next()
+            }
+            ACTION_PREVIOUS -> {
+                val app = application as MuseeksApplication
+                app.playerManager.previous()
+            }
+        }
+
         return START_STICKY
     }
 
@@ -49,10 +73,27 @@ class PlaybackService : MediaSessionService() {
         return mediaSession
     }
 
+    override fun onUpdateNotification(
+        mediaSession: MediaSession,
+        startInForeground: Boolean
+    ): MediaNotification {
+        return notificationCallback.onUpdateNotification(mediaSession, startInForeground)
+    }
+
     companion object {
         const val ACTION_PLAY = "com.werhes.museeks.action.PLAY"
         const val ACTION_PAUSE = "com.werhes.museeks.action.PAUSE"
         const val ACTION_NEXT = "com.werhes.museeks.action.NEXT"
         const val ACTION_PREVIOUS = "com.werhes.museeks.action.PREVIOUS"
+
+        fun createPendingIntent(context: Context, action: String): PendingIntent {
+            val intent = Intent(context, PlaybackService::class.java).apply {
+                this.action = action
+            }
+            return PendingIntent.getService(
+                context, action.hashCode(), intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
     }
 }

@@ -21,7 +21,4 @@
 
     <!-- Dock navigation -->
     <dimen name="dock_height">72dp</dimen>
-
-    <!-- Seekbar -->
-    <dimen name="mdc_seekbar_height">4dp</dimen>
 </resources>

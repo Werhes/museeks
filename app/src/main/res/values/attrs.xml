@@ -14,6 +14,7 @@
     <!-- Backgrounds -->
     <attr name="bg_primary" format="reference" />
     <attr name="bg_page" format="reference" />
+    <attr name="bg_header" format="reference" />
     <attr name="alert_background" format="reference" />
     <attr name="blur_darkening_color" format="reference" />
     <attr name="bottomsheet_background_color" format="reference" />
@@ -39,8 +40,5 @@
     <attr name="button_tertiary_background_disabled" format="reference" />
     <attr name="button_tertiary_foreground" format="reference" />
     <attr name="button_tertiary_foreground_disabled" format="reference" />
-
-    <!-- Layout attributes -->
-    <attr name="bg_header" format="reference" />
 
 </resources>

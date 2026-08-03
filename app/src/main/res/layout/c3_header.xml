@@ -1,59 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:minHeight="44dp">
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="16dp"
+    android:paddingBottom="8dp">
+
     <LinearLayout
-        android:orientation="vertical"
-        android:id="@+id/extendedAlign"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_centerVertical="true"
-        android:layout_marginStart="@dimen/post_side_padding"
-        android:layout_marginEnd="8dp">
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
         <TextView
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="?attr/text_primary"
-            android:id="@+id/title"
+            android:id="@+id/header_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="20sp"
+            android:textColor="?android:attr/textColorPrimary"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/header_action"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:fontFamily="@font/vk_sans_display_demibold"
-            style="@style/TextStyle"/>
-        <TextView
-            android:textSize="13sp"
-            android:textColor="?attr/text_secondary"
-            android:id="@+id/subtitle"
-            android:paddingTop="2dp"
-            android:visibility="gone"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            style="@style/TextStyle"/>
+            android:textSize="14sp"
+            android:textColor="?android:attr/colorAccent"
+            android:padding="8dp"
+            android:visibility="gone" />
+
     </LinearLayout>
+
     <TextView
-        android:textSize="16sp"
-        android:textColor="?attr/text_secondary"
-        android:gravity="center_vertical"
-        android:id="@+id/badge"
-        android:visibility="gone"
-        android:layout_width="wrap_content"
+        android:id="@+id/header_subtitle"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_centerVertical="true"
-        android:fontFamily="@font/vk_sans_display_regular"
-        android:layout_toEndOf="@+id/extendedAlign"
-        style="@style/TextStyle"/>
-    <TextView
-        android:textColor="?attr/colorAccent"
-        android:layout_gravity="end|center_vertical"
-        android:id="@+id/show_all_btn"
-        android:background="?attr/selectableItemBackground"
-        android:visibility="gone"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/show_all"
-        android:drawablePadding="4dp"
-        android:layout_alignParentEnd="true"
-        android:backgroundTint="?attr/global_accent"
-        app:drawableTint="?attr/global_accent"
-        style="@style/TextButton.Blue"/>
-</RelativeLayout>
+        android:textSize="14sp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:visibility="gone" />
+
+</LinearLayout>

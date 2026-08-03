@@ -22,7 +22,9 @@ class ProfileFragment : Fragment() {
     private lateinit var authManager: VkAuthManager
     private lateinit var avatar: ImageView
     private lateinit var nameText: TextView
-    private lateinit var statsText: TextView
+    private lateinit var tracksCountText: TextView
+    private lateinit var playlistsCountText: TextView
+    private lateinit var friendsCountText: TextView
     private lateinit var loginBtn: Button
     private lateinit var logoutBtn: Button
     private lateinit var loginPrompt: View
@@ -34,10 +36,12 @@ class ProfileFragment : Fragment() {
 
         avatar = view.findViewById(R.id.profile_avatar)
         nameText = view.findViewById(R.id.profile_name)
-        statsText = view.findViewById(R.id.profile_stats)
-        loginBtn = view.findViewById(R.id.login_button)
-        logoutBtn = view.findViewById(R.id.logout_button)
-        loginPrompt = view.findViewById(R.id.login_prompt)
+        tracksCountText = view.findViewById(R.id.profile_tracks_count)
+        playlistsCountText = view.findViewById(R.id.profile_playlists_count)
+        friendsCountText = view.findViewById(R.id.profile_friends_count)
+        loginBtn = view.findViewById(R.id.profile_login)
+        logoutBtn = view.findViewById(R.id.profile_logout)
+        loginPrompt = view.findViewById(R.id.profile_login_prompt)
         profileContent = view.findViewById(R.id.profile_content)
 
         loginBtn.setOnClickListener {
@@ -82,7 +86,6 @@ class ProfileFragment : Fragment() {
                 val profile = profiles.firstOrNull() ?: return@onSuccess
                 requireActivity().runOnUiThread {
                     nameText.text = profile.fullName
-                    statsText.text = profile.status ?: ""
                     profile.photoUrl?.let { url ->
                         val request = ImageRequest.Builder(requireContext())
                             .data(url).target(avatar).build()

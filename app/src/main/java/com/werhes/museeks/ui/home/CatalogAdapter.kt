@@ -86,8 +86,8 @@ class CatalogAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     class PlaylistViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         private val title: TextView = view.findViewById(R.id.playlist_title)
-        private val subtitle: TextView = view.findViewById(R.id.playlist_subtitle)
-        private val cover: ImageView = view.findViewById(R.id.playlist_cover)
+        private val subtitle: TextView = view.findViewById(R.id.playlist_author)
+        private val cover: ImageView = view.findViewById(R.id.playlist_image)
         fun bind(item: CatalogItem) {
             title.text = item.playlist?.title ?: item.title ?: ""
             subtitle.text = item.playlist?.artistName ?: item.subtitle ?: ""
@@ -101,9 +101,9 @@ class CatalogAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     }
 
     class TrackViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        private val title: TextView = view.findViewById(R.id.track_title)
-        private val artist: TextView = view.findViewById(R.id.track_artist)
-        private val cover: ImageView = view.findViewById(R.id.track_cover)
+        private val title: TextView = view.findViewById(R.id.song_title)
+        private val artist: TextView = view.findViewById(R.id.song_author)
+        private val cover: ImageView = view.findViewById(R.id.song_album)
         fun bind(item: CatalogItem) {
             val track = item.track
             title.text = track?.title ?: item.title ?: ""

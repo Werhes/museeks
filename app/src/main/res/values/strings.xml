@@ -2266,4 +2266,14 @@
     <string name="profile_friends">Друзья</string>
     <string name="login">Войти</string>
     <string name="back">Назад</string>
+
+    <!-- Settings strings -->
+    <string name="settings_audio_quality">Качество аудио</string>
+    <string name="settings_storage">Хранилище</string>
+    <string name="settings_notifications">Уведомления</string>
+    <string name="settings_theme">Тема оформления</string>
+    <string name="settings_language">Язык</string>
+    <string name="settings_about">О приложении</string>
+    <string name="settings_vkx_plus">VK X Plus</string>
+    <string name="settings_debug">Отладка</string>
 </resources>

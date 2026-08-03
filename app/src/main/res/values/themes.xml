@@ -13,6 +13,7 @@
         <item name="text_inverse">@color/primary_text_default_material_dark</item>
         <item name="bg_primary">@color/background_material_light</item>
         <item name="bg_page">@color/background_floating_material_light</item>
+        <item name="bg_header">@color/background_material_light</item>
         <item name="global_accent">@color/sky_300</item>
         <item name="separator_alpha">@color/ripple_material_light</item>
         <item name="scrim_color">@color/mtrl_scrim_color</item>
@@ -49,8 +50,5 @@
 
         <!-- Text colors for dialogs -->
         <item name="textColorAlertDialogListItem">@color/primary_text_default_material_light</item>
-
-        <!-- Layout attributes -->
-        <item name="bg_header">@color/background_floating_material_light</item>
     </style>
 </resources>

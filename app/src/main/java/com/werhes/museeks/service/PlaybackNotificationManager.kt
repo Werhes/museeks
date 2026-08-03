@@ -13,41 +13,36 @@ import androidx.core.app.NotificationCompat
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
-import androidx.media3.ui.PlayerNotificationManager
+import androidx.media3.session.MediaSessionService
 import com.werhes.museeks.MainActivity
 import com.werhes.museeks.R
 import com.werhes.museeks.api.model.music.AudioTrack
 import coil.Coil
 import coil.request.ImageRequest
 import coil.target.Target
-import kotlinx.coroutines.runBlocking
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
 
 @OptIn(UnstableApi::class)
 class PlaybackNotificationManager(
     private val context: Context,
     private val mediaSession: MediaSession
-) : PlayerNotificationManager.NotificationListener {
-
-    private val notificationManager: PlayerNotificationManager
+) {
+    private var notificationShown = false
 
     init {
         createNotificationChannel()
-
-        notificationManager = PlayerNotificationManager.Builder(context, NOTIFICATION_ID, CHANNEL_ID)
-            .setMediaDescriptionAdapter(MuseeksMediaDescriptionAdapter(context))
-            .setNotificationListener(this)
-            .build()
-
-        notificationManager.setPlayer(mediaSession.player)
-        notificationManager.setPriority(NotificationCompat.PRIORITY_LOW)
     }
 
     fun start() {
-        notificationManager.setPlayer(mediaSession.player)
+        if (!notificationShown) {
+            notificationShown = true
+            // MediaSessionService сам управляет уведомлением через onUpdateNotification
+        }
     }
 
     fun stop() {
-        notificationManager.setPlayer(null)
+        notificationShown = false
     }
 
     private fun createNotificationChannel() {
@@ -61,14 +56,6 @@ class PlaybackNotificationManager(
         }
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(channel)
-    }
-
-    override fun onNotificationPosted(notificationId: Int, notification: android.app.Notification, ongoing: Boolean) {
-        // Notification posted
-    }
-
-    override fun onNotificationCancelled(notificationId: Int, dismissedByUser: Boolean) {
-        // Notification cancelled
     }
 
     companion object {
@@ -87,58 +74,90 @@ class PlaybackNotificationManager(
     }
 }
 
+/**
+ * Callback для MediaSessionService, который предоставляет уведомление.
+ */
 @OptIn(UnstableApi::class)
-class MuseeksMediaDescriptionAdapter(
+class PlaybackMediaNotificationCallback(
     private val context: Context
-) : PlayerNotificationManager.MediaDescriptionAdapter {
+) : MediaSessionService.MediaNotification {
 
-    override fun getCurrentContentTitle(player: Player): CharSequence {
-        val track = getCurrentTrack(player)
-        return track?.title ?: context.getString(R.string.unknown_track)
+    override fun onUpdateNotification(
+        mediaSession: MediaSession,
+        startInForeground: Boolean
+    ): MediaSessionService.MediaNotification {
+        val player = mediaSession.player
+        val notification = buildNotification(player)
+        return MediaSessionService.MediaNotification(NOTIFICATION_ID, notification)
     }
 
-    override fun getCurrentContentText(player: Player): CharSequence? {
+    private fun buildNotification(player: Player?): android.app.Notification {
         val track = getCurrentTrack(player)
-        return track?.artist ?: context.getString(R.string.unknown_artist)
-    }
 
-    override fun getCurrentLargeIcon(player: Player): CompletableFuture<Bitmap> {
-        val future = CompletableFuture<Bitmap>()
-        val track = getCurrentTrack(player)
-        val artUrl = track?.getAlbumArtUrl()
+        val builder = NotificationCompat.Builder(context, PlaybackNotificationManager.CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(track?.title ?: context.getString(R.string.unknown_track))
+            .setContentText(track?.artist ?: context.getString(R.string.unknown_artist))
+            .setContentIntent(PlaybackNotificationManager.createMainActivityPendingIntent(context))
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setOngoing(player?.isPlaying == true)
+            .setShowWhen(false)
 
-        if (artUrl != null) {
-            val request = ImageRequest.Builder(context)
-                .data(artUrl)
-                .target(object : Target {
-                    override fun onSuccess(result: Drawable) {
-                        future.complete(result.toBitmap())
-                    }
+        // Добавляем кнопки управления
+        builder.addAction(
+            R.drawable.ic_skip_previous_24,
+            "Previous",
+            PlaybackService.createPendingIntent(context, PlaybackService.ACTION_PREVIOUS)
+        )
 
-                    override fun onError(error: Drawable?) {
-                        future.complete(null)
-                    }
-
-                    override fun onStart(placeholder: Drawable?) {
-                        // Not needed
-                    }
-                })
-                .build()
-            Coil.imageLoader(context).enqueue(request)
+        if (player?.isPlaying == true) {
+            builder.addAction(
+                R.drawable.ic_pause_24,
+                "Pause",
+                PlaybackService.createPendingIntent(context, PlaybackService.ACTION_PAUSE)
+            )
         } else {
-            future.complete(null)
+            builder.addAction(
+                R.drawable.ic_play_arrow_24,
+                "Play",
+                PlaybackService.createPendingIntent(context, PlaybackService.ACTION_PLAY)
+            )
         }
 
-        return future
+        builder.addAction(
+            R.drawable.ic_skip_next_24,
+            "Next",
+            PlaybackService.createPendingIntent(context, PlaybackService.ACTION_NEXT)
+        )
+
+        // Загружаем обложку альбома
+        val artUrl = track?.getAlbumArtUrl()
+        if (artUrl != null) {
+            val bitmap = loadBitmapSync(artUrl)
+            if (bitmap != null) {
+                builder.setLargeIcon(bitmap)
+            }
+        }
+
+        return builder.build()
     }
 
-    override fun getCurrentContentIntent(player: Player): PendingIntent? {
-        return PlaybackNotificationManager.createMainActivityPendingIntent(context)
-    }
-
-    private fun getCurrentTrack(player: Player): AudioTrack? {
+    private fun getCurrentTrack(player: Player?): AudioTrack? {
+        if (player == null) return null
         val app = context.applicationContext as com.werhes.museeks.MuseeksApplication
         return app.playerManager.currentTrack
+    }
+
+    private fun loadBitmapSync(url: String): Bitmap? {
+        try {
+            val request = ImageRequest.Builder(context)
+                .data(url)
+                .allowHardware(false)
+                .build()
+            return Coil.imageLoader(context).execute(request).drawable?.toBitmap()
+        } catch (e: Exception) {
+            return null
+        }
     }
 }
 
