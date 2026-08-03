@@ -66,17 +66,33 @@ class PlaybackNotificationManager(
 }
 
 /**
- * Callback для MediaSessionService, который предоставляет уведомление.
+ * Provider для MediaSession, который создаёт уведомление о воспроизведении.
+ * Используется с MediaSession.Builder.setNotificationProvider() в Media3 1.5.x.
  */
-class PlaybackMediaNotificationCallback(
+class PlaybackMediaNotificationProvider(
     private val context: Context
-) {
-    fun onUpdateNotification(
+) : MediaNotification.Provider {
+
+    override fun createNotification(
         mediaSession: MediaSession,
-        startInForeground: Boolean
-    ): android.app.Notification {
+        customLayout: MediaSession.ControllerInfo?,
+        actionFactory: MediaSession.CommandButtonFactory
+    ): MediaNotification {
         val player = mediaSession.player
-        return buildNotification(player)
+        val notification = buildNotification(player)
+        return MediaNotification(
+            PlaybackNotificationManager.NOTIFICATION_ID,
+            notification
+        )
+    }
+
+    override fun handleCustomCommand(
+        mediaSession: MediaSession,
+        controller: MediaSession.ControllerInfo,
+        customAction: String,
+        extras: android.os.Bundle
+    ): Boolean {
+        return false
     }
 
     private fun buildNotification(player: Player?): android.app.Notification {

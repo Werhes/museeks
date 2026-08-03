@@ -12,7 +12,6 @@ class PlaybackService : MediaSessionService() {
 
     private lateinit var mediaSession: MediaSession
     private lateinit var notificationManager: PlaybackNotificationManager
-    private lateinit var notificationCallback: PlaybackMediaNotificationCallback
 
     override fun onCreate() {
         super.onCreate()
@@ -20,11 +19,13 @@ class PlaybackService : MediaSessionService() {
         val app = application as MuseeksApplication
         val playerManager = app.playerManager
 
+        val notificationProvider = PlaybackMediaNotificationProvider(this)
+
         mediaSession = MediaSession.Builder(this, playerManager.exoPlayer)
             .setSessionActivity(PlaybackNotificationManager.createMainActivityPendingIntent(this))
+            .setNotificationProvider(notificationProvider)
             .build()
 
-        notificationCallback = PlaybackMediaNotificationCallback(this)
         notificationManager = PlaybackNotificationManager(this, mediaSession)
         notificationManager.start()
     }
@@ -74,12 +75,9 @@ class PlaybackService : MediaSessionService() {
     override fun onUpdateNotification(
         mediaSession: MediaSession,
         startInForeground: Boolean
-    ): MediaNotification {
-        val notification = notificationCallback.onUpdateNotification(mediaSession, startInForeground)
-        return MediaNotification(
-            PlaybackNotificationManager.NOTIFICATION_ID,
-            notification
-        )
+    ) {
+        // Уведомление теперь управляется через MediaNotification.Provider,
+        // установленный в MediaSession.Builder.setNotificationProvider()
     }
 
     companion object {
