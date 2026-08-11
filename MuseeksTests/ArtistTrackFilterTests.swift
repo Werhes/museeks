@@ -31,6 +31,19 @@ final class ArtistTrackFilterTests: XCTestCase {
         )
     }
 
+    func testTrackArtistParserBuildsChooserEntriesForCollaborations() {
+        XCTAssertEqual(
+            TrackArtistParser.names(
+                from: "Artist One feat. Artist Two, Artist Three"
+            ),
+            ["Artist One", "Artist Two", "Artist Three"]
+        )
+        XCTAssertEqual(
+            TrackArtistParser.names(from: "Solo Artist"),
+            ["Solo Artist"]
+        )
+    }
+
     func testPartialNameDoesNotMatchAnotherArtist() {
         XCTAssertFalse(
             ArtistTrackFilter.matches(

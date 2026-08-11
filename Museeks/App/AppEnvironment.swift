@@ -10,6 +10,7 @@ final class AppEnvironment: ObservableObject {
     let historyStore: ListeningHistoryStore
     let libraryStore: MusicLibraryStore
     let homeCatalogStore: HomeCatalogStore
+    let overviewCatalogStore: OverviewCatalogStore
     let likedAlbumsStore: LikedAlbumsStore
     let offlineStore: OfflineTrackStore
     let pinnedMixStore: PinnedMixStore
@@ -43,6 +44,7 @@ final class AppEnvironment: ObservableObject {
         self.historyStore = ListeningHistoryStore()
         self.libraryStore = MusicLibraryStore()
         self.homeCatalogStore = HomeCatalogStore()
+        self.overviewCatalogStore = OverviewCatalogStore()
         self.likedAlbumsStore = LikedAlbumsStore()
         let trackShareService = TrackShareService()
         self.trackShareService = trackShareService
@@ -79,10 +81,23 @@ final class AppEnvironment: ObservableObject {
             baseURL: configuration.vkAPIBaseURL,
             userAgent: sessionStore.userAgent
         )
+        let deviceIDAccount = "vk-api-device-id-v1"
+        let apiDeviceID: String
+        let storedDeviceID = try? keychain.load(
+            String.self,
+            account: deviceIDAccount
+        )
+        if let stored = storedDeviceID, !stored.isEmpty {
+            apiDeviceID = stored
+        } else {
+            apiDeviceID = UUID().uuidString.lowercased()
+            try? keychain.save(apiDeviceID, account: deviceIDAccount)
+        }
         let service = VKMusicService(
             client: client,
             apiVersion: configuration.apiVersion,
-            initialUserID: sessionStore.resolvedOfflineAccountID
+            initialUserID: sessionStore.resolvedOfflineAccountID,
+            deviceID: apiDeviceID
         )
         self.musicService = service
         player.configureContinuation { [weak self, service] in
@@ -137,6 +152,47 @@ final class AppEnvironment: ObservableObject {
             self?.scheduleAutomaticCache(for: track)
             self?.schedulePredictivePreDownload()
         }
+        player.configureLibraryFeedback(
+            isLiked: { [weak self] track in
+                guard let self else { return false }
+                return self.libraryStore.isLiked(
+                    track,
+                    currentUserID: self.sessionStore.resolvedOfflineAccountID
+                )
+            },
+            setLiked: { [weak self] track, desiredState in
+                guard let self else { return false }
+                do {
+                    return try await self.setTrackLiked(
+                        track,
+                        desiredState: desiredState
+                    )
+                } catch is CancellationError {
+                    return self.libraryStore.isLiked(
+                        track,
+                        currentUserID:
+                            self.sessionStore.resolvedOfflineAccountID
+                    )
+                } catch {
+                    self.player.errorMessage = L10n.format(
+                        desiredState
+                            ? "Не удалось добавить трек: %@"
+                            : "Не удалось удалить трек: %@",
+                        error.localizedDescription
+                    )
+                    return self.libraryStore.isLiked(
+                        track,
+                        currentUserID:
+                            self.sessionStore.resolvedOfflineAccountID
+                    )
+                }
+            }
+        )
+        libraryStore.$signatures
+            .sink { [weak player] _ in
+                player?.refreshRemoteLikeState()
+            }
+            .store(in: &cancellables)
         settings.$offlineStorageLimitGB
             .removeDuplicates()
             .sink { [weak offlineStore] limitGB in
@@ -192,16 +248,11 @@ final class AppEnvironment: ObservableObject {
             },
             likeCurrent: { [weak self] track in
                 guard let self else { return false }
-                if self.libraryStore.contains(track) { return true }
                 do {
-                    let added = try await self.withAuthorizedToken { token in
-                        try await self.musicService.addToLibrary(
-                            track,
-                            accessToken: token
-                        )
-                    }
-                    self.libraryStore.markAdded(source: track, stored: added)
-                    return true
+                    return try await self.setTrackLiked(
+                        track,
+                        desiredState: true
+                    )
                 } catch {
                     return false
                 }
@@ -215,6 +266,47 @@ final class AppEnvironment: ObservableObject {
         offlineStore.configure(accountID: accountID)
         OfflinePlaylistStore.shared.configure(accountID: accountID)
         pinnedMixStore.configure(accountID: accountID)
+    }
+
+    @discardableResult
+    func setTrackLiked(
+        _ track: Track,
+        desiredState: Bool
+    ) async throws -> Bool {
+        let isCurrentlyLiked = libraryStore.isLiked(
+            track,
+            currentUserID: sessionStore.resolvedOfflineAccountID
+        )
+        guard isCurrentlyLiked != desiredState else {
+            return isCurrentlyLiked
+        }
+
+        if desiredState {
+            let added = try await withAuthorizedToken { token in
+                try await musicService.addToLibrary(
+                    track,
+                    accessToken: token
+                )
+            }
+            libraryStore.markAdded(source: track, stored: added)
+            MusicLibraryEvents.postAdded(added)
+        } else {
+            let stored = libraryStore.storedTrack(for: track) ?? track
+            try await withAuthorizedToken { token in
+                try await musicService.removeFromLibrary(
+                    stored,
+                    accessToken: token
+                )
+            }
+            libraryStore.markRemoved(track)
+            libraryStore.markRemoved(stored)
+            MusicLibraryEvents.postRemoved(stored)
+        }
+
+        return libraryStore.isLiked(
+            track,
+            currentUserID: sessionStore.resolvedOfflineAccountID
+        )
     }
 
     func refreshHomeCatalog(force: Bool = false) async {
@@ -313,6 +405,37 @@ final class AppEnvironment: ObservableObject {
             errorMessage: failures.first,
             refreshID: refreshID
         )
+    }
+
+    func refreshOverviewCatalog(force: Bool = false) async {
+        overviewCatalogStore.prepare(
+            accountID: sessionStore.resolvedOfflineAccountID
+        )
+        guard sessionStore.accessToken != nil,
+              overviewCatalogStore.shouldRefresh(force: force) else {
+            return
+        }
+        let refreshID = overviewCatalogStore.beginRefreshing()
+        do {
+            let catalog = try await withAuthorizedToken { token in
+                try await musicService.overviewCatalog(accessToken: token)
+            }
+            overviewCatalogStore.finish(
+                shelves: catalog.shelves,
+                bannerURLs: catalog.bannerURLs,
+                errorMessage: nil,
+                refreshID: refreshID
+            )
+        } catch is CancellationError {
+            overviewCatalogStore.cancelRefreshing(refreshID: refreshID)
+        } catch {
+            overviewCatalogStore.finish(
+                shelves: nil,
+                bannerURLs: nil,
+                errorMessage: error.localizedDescription,
+                refreshID: refreshID
+            )
+        }
     }
 
     private var resumePlaybackAfterShare = false

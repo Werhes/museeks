@@ -195,9 +195,9 @@ enum AlbumAccessPolicy {
 }
 
 enum MixTrackRequestPolicy {
-    /// Stream mixes often return ~3 items even when a larger count is asked.
-    static let pageSize = 100
-    /// Concurrent pages to fill a usable queue without 10× API spam.
+    /// VK's native Mix client requests up to 50 tracks per call.
+    static let pageSize = 50
+    /// Sequential append calls used to fill a usable queue.
     static let pageCount = 4
     /// First page only — start playback before the rest arrive.
     static let bootstrapPages = 1
@@ -225,7 +225,8 @@ enum CatalogSectionPolicy {
             "mix", "микс", "stream", "подбор", "radio", "вкус",
             "для вас", "for you", "discover", "поток", "mood",
             "настроен", "активност", "activity", "жанр", "genre",
-            "section=mix", "listen together", "друг"
+            "section=mix", "listen together", "друг", "алгоритм",
+            "algorithm"
         ]
         return markers.contains { blob.contains($0) }
     }
@@ -233,8 +234,9 @@ enum CatalogSectionPolicy {
     static func looksLikeReleasesSection(_ section: CatalogSectionRef) -> Bool {
         let blob = section.searchableBlob
         let markers = [
-            "release", "релиз", "нов", "выход", "премьер", "album",
-            "альбом", "new music", "свеж"
+            "release", "релиз", "новые релизы", "новинки",
+            "new_albums", "new-albums", "section=new", "new music",
+            "свежие альбомы", "премьеры", "выходы"
         ]
         return markers.contains { blob.contains($0) }
     }

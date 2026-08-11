@@ -38,6 +38,15 @@ final class MusicLibraryStoreTests: XCTestCase {
         XCTAssertTrue(store.isLiked(otherTrack, currentUserID: 42))
     }
 
+    func testExplicitRemovalClearsLikedStateForCurrentUserTrack() {
+        let store = MusicLibraryStore()
+        let ownTrack = track(id: 1, owner: 42, title: "Own")
+
+        XCTAssertTrue(store.isLiked(ownTrack, currentUserID: 42))
+        store.markRemoved(ownTrack)
+        XCTAssertFalse(store.isLiked(ownTrack, currentUserID: 42))
+    }
+
     func testStaleEmptyReplaceCannotWipeNewerIndex() {
         let store = MusicLibraryStore()
         let staleID = store.beginRefresh()

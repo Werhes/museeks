@@ -1,13 +1,11 @@
 import Foundation
 
 @MainActor
-final class HomeCatalogStore: ObservableObject {
+final class OverviewCatalogStore: ObservableObject {
     static let staleInterval: TimeInterval = 15 * 60
 
-    @Published private(set) var recommendations: [Track] = []
-    @Published private(set) var mixes: [MusicMix] = []
-    @Published private(set) var playlists: [Playlist] = []
-    @Published private(set) var newReleases: [Album] = []
+    @Published private(set) var shelves: [VKOverviewShelf] = []
+    @Published private(set) var bannerURLs: [URL] = []
     @Published private(set) var isRefreshing = false
     @Published private(set) var lastRefreshedAt: Date?
     @Published var errorMessage: String?
@@ -15,21 +13,14 @@ final class HomeCatalogStore: ObservableObject {
     private var lastAttemptedAt: Date?
     private var refreshGeneration = 0
 
-    var isEmpty: Bool {
-        recommendations.isEmpty
-            && mixes.isEmpty
-            && playlists.isEmpty
-            && newReleases.isEmpty
-    }
+    var isEmpty: Bool { shelves.allSatisfy(\.isEmpty) && bannerURLs.isEmpty }
 
     func prepare(accountID: Int?) {
         guard self.accountID != accountID else { return }
         self.accountID = accountID
         refreshGeneration += 1
-        recommendations = []
-        mixes = []
-        playlists = []
-        newReleases = []
+        shelves = []
+        bannerURLs = []
         lastRefreshedAt = nil
         lastAttemptedAt = nil
         errorMessage = nil
@@ -53,10 +44,8 @@ final class HomeCatalogStore: ObservableObject {
     }
 
     func finish(
-        recommendations: [Track]?,
-        mixes: [MusicMix]?,
-        playlists: [Playlist]?,
-        newReleases: [Album]? = nil,
+        shelves: [VKOverviewShelf]?,
+        bannerURLs: [URL]?,
         errorMessage: String?,
         refreshID: Int? = nil,
         now: Date = Date()
@@ -64,10 +53,8 @@ final class HomeCatalogStore: ObservableObject {
         guard refreshID == nil || refreshID == refreshGeneration else {
             return
         }
-        if let recommendations { self.recommendations = recommendations }
-        if let mixes { self.mixes = mixes }
-        if let playlists { self.playlists = playlists }
-        if let newReleases { self.newReleases = newReleases }
+        if let shelves { self.shelves = shelves }
+        if let bannerURLs { self.bannerURLs = bannerURLs }
         self.errorMessage = errorMessage
         lastAttemptedAt = now
         if errorMessage == nil {

@@ -10,6 +10,7 @@ struct TrackRow: View {
     let queue: [Track]
     var source: QueueSource? = nil
     @State private var sharingTrack: Track?
+    @State private var detailDestination: TrackDetailDestination?
 
     var body: some View {
         Button {
@@ -95,6 +96,9 @@ struct TrackRow: View {
         )
         .accessibilityHint(L10n.text("Воспроизвести трек"))
         .trackShareSheet(track: $sharingTrack)
+        .sheet(item: $detailDestination) { destination in
+            TrackDestinationSheet(destination: destination)
+        }
         .contextMenu {
             Button {
                 player.playNext(track)
@@ -110,6 +114,20 @@ struct TrackRow: View {
                 player.presentPlayer()
             } label: {
                 Label("Открыть плеер", systemImage: "play.circle")
+            }
+            Button {
+                Haptics.open()
+                detailDestination = .artists(track)
+            } label: {
+                Label("Открыть артиста", systemImage: "person.crop.circle")
+            }
+            if TrackAlbumNavigation.canOpen(track) {
+                Button {
+                    Haptics.open()
+                    detailDestination = .album(track)
+                } label: {
+                    Label("Открыть альбом", systemImage: "square.stack")
+                }
             }
             Button {
                 Haptics.open()

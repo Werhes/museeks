@@ -15,11 +15,16 @@ protocol MusicService: Sendable {
     ) async throws -> Track
     func mixes(accessToken: String) async throws -> [MusicMix]
     func catalogSnapshot(accessToken: String) async throws -> VKCatalogSnapshot
+    func overviewCatalog(accessToken: String) async throws -> VKOverviewCatalog
     func newReleases(accessToken: String) async throws -> [Album]
+    func mixSettings(
+        _ mix: MusicMix,
+        accessToken: String
+    ) async throws -> VKMixSettings
     func mixTracks(
         _ mix: MusicMix,
         accessToken: String,
-        startingOffset: Int,
+        startingAppend: Int,
         pages: Int
     ) async throws -> [Track]
     func search(
@@ -132,7 +137,7 @@ extension MusicService {
         try await mixTracks(
             mix,
             accessToken: accessToken,
-            startingOffset: 0,
+            startingAppend: 0,
             pages: MixTrackRequestPolicy.pageCount
         )
     }
@@ -145,7 +150,7 @@ extension MusicService {
         try await mixTracks(
             mix,
             accessToken: accessToken,
-            startingOffset: 0,
+            startingAppend: 0,
             pages: MixTrackRequestPolicy.bootstrapPages
         )
     }
@@ -155,7 +160,6 @@ extension MusicService {
         _ mix: MusicMix,
         accessToken: String
     ) async throws -> [Track] {
-        let pageSize = MixTrackRequestPolicy.pageSize
         let bootstrap = MixTrackRequestPolicy.bootstrapPages
         let remaining = max(
             MixTrackRequestPolicy.pageCount - bootstrap,
@@ -164,7 +168,7 @@ extension MusicService {
         return try await mixTracks(
             mix,
             accessToken: accessToken,
-            startingOffset: bootstrap * pageSize,
+            startingAppend: 1,
             pages: remaining
         )
     }

@@ -7,6 +7,7 @@ struct CatalogView: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var history: ListeningHistoryStore
     @EnvironmentObject private var homeCatalog: HomeCatalogStore
+    @EnvironmentObject private var overviewCatalog: OverviewCatalogStore
     @EnvironmentObject private var scrollCoordinator: MainTabScrollCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var actionErrorMessage: String?
@@ -15,15 +16,32 @@ struct CatalogView: View {
     @State private var loadingAlbumTrackID: String?
     @State private var loadingPlayAlbumID: String?
     @State private var albumLookupTask: Task<Void, Never>?
+    @State private var detailDestination: TrackDetailDestination?
+    @State private var mode: CatalogMode = .home
 
     var body: some View {
+        switch mode {
+        case .home:
+            homeScreen
+        case .overview:
+            overviewScreen
+        }
+    }
+
+    private var homeScreen: some View {
         ScrollViewReader { scrollProxy in
             GeometryReader { proxy in
                 let metrics = HomeMetrics(containerWidth: proxy.size.width)
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 22) {
+                        catalogModeHeader
+
                         welcomeHeader
                             .id(MainTabScrollDestination.home)
+
+                        VKMixHomeCard(mix: personalMix)
+
+                        AlgorithmicMixSection(mixes: homeCatalog.mixes)
 
                         if !history.entries.isEmpty {
                             recentlyPlayedSection(metrics: metrics)
@@ -61,6 +79,9 @@ struct CatalogView: View {
         .navigationBarTitleDisplayMode(.inline)
         .dynamicTypeSize(...DynamicTypeSize.large)
         .trackShareSheet(track: $sharingTrack)
+        .sheet(item: $detailDestination) { destination in
+            TrackDestinationSheet(destination: destination)
+        }
         .navigationDestination(
             isPresented: Binding(
                 get: { selectedAlbum != nil },
@@ -88,6 +109,54 @@ struct CatalogView: View {
         }
     }
 
+    private var overviewScreen: some View {
+        OverviewView(
+            mode: $mode,
+            catalogModeHeader: AnyView(catalogModeHeader)
+        )
+        .background(ThemeBackground())
+        .dynamicTypeSize(...DynamicTypeSize.large)
+    }
+
+    private var catalogModeHeader: some View {
+        HStack(spacing: 8) {
+            ForEach(CatalogMode.allCases) { candidate in
+                Button {
+                    if mode != candidate {
+                        Haptics.selection()
+                        withAnimation(
+                            reduceMotion ? nil : .easeInOut(duration: 0.18)
+                        ) {
+                            mode = candidate
+                        }
+                    }
+                } label: {
+                    Text(candidate.title)
+                        .font(.footnote.weight(.semibold))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .background {
+                            if mode == candidate {
+                                Capsule().fill(settings.theme.accent.opacity(0.16))
+                            }
+                        }
+                        .foregroundStyle(
+                            mode == candidate
+                                ? settings.theme.accent
+                                : Color.primary.opacity(0.7)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(
+                    mode == candidate ? .isSelected : []
+                )
+            }
+        }
+        .padding(4)
+        .premiumCard(interactive: false)
+    }
+
     private func scrollToTop(
         _ proxy: ScrollViewProxy,
         destination: MainTabScrollDestination
@@ -103,6 +172,9 @@ struct CatalogView: View {
 
     private var recommendations: [Track] { homeCatalog.recommendations }
     private var playlists: [Playlist] { homeCatalog.playlists }
+    private var personalMix: MusicMix {
+        homeCatalog.mixes.first { $0.id == MusicMix.common.id } ?? .common
+    }
     private var isLoading: Bool { homeCatalog.isRefreshing }
     private var errorMessage: String? {
         actionErrorMessage ?? homeCatalog.errorMessage
@@ -111,6 +183,7 @@ struct CatalogView: View {
     private var contentIsEmpty: Bool {
         recommendations.isEmpty && playlists.isEmpty
             && homeCatalog.newReleases.isEmpty
+            && homeCatalog.mixes.isEmpty
     }
 
     private var welcomeHeader: some View {
@@ -664,6 +737,18 @@ struct CatalogView: View {
             Label("Открыть плеер", systemImage: "play.circle")
         }
         Button {
+            detailDestination = .artists(track)
+        } label: {
+            Label("Открыть артиста", systemImage: "person.crop.circle")
+        }
+        if TrackAlbumNavigation.canOpen(track) {
+            Button {
+                detailDestination = .album(track)
+            } label: {
+                Label("Открыть альбом", systemImage: "square.stack")
+            }
+        }
+        Button {
             sharingTrack = track
         } label: {
             Label("Поделиться аудиофайлом", systemImage: "square.and.arrow.up")
@@ -711,6 +796,20 @@ struct CatalogView: View {
     }
 }
 
+enum CatalogMode: String, CaseIterable, Identifiable {
+    case home
+    case overview
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .home: L10n.text("Главная")
+        case .overview: L10n.text("Обзор")
+        }
+    }
+}
+
 private struct HomeMetrics {
     let containerWidth: CGFloat
 
@@ -739,7 +838,7 @@ private struct HomeMetrics {
     }
 }
 
-private struct HomeSectionHeader: View {
+struct HomeSectionHeader: View {
     let title: String
     let subtitle: String?
 
@@ -766,7 +865,7 @@ private struct HomeSectionHeader: View {
     }
 }
 
-private struct HomeTrackArtwork: View {
+struct HomeTrackArtwork: View {
     @EnvironmentObject private var settings: AppSettings
     let url: URL?
     let size: CGFloat

@@ -424,8 +424,17 @@ final class HomeCatalogStoreTests: XCTestCase {
         store.prepare(accountID: 1)
         store.finish(
             recommendations: [],
-            mixes: [.common],
+            mixes: [],
             playlists: [],
+            newReleases: [
+                Album(
+                    id: 1,
+                    ownerID: -1,
+                    title: "New Release",
+                    count: 10,
+                    artists: ["Artist"]
+                )
+            ],
             errorMessage: nil,
             now: Date(timeIntervalSince1970: 100)
         )

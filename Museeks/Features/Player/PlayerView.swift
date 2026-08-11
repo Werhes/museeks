@@ -423,7 +423,7 @@ struct PlayerView: View {
                     .foregroundStyle(playerForeground)
                     .lineLimit(1)
                 Button {
-                    present(.artist(track.artist))
+                    present(.artist(track))
                 } label: {
                     Text(track.artist)
                         .font(.subheadline)
@@ -830,8 +830,21 @@ struct PlayerView: View {
             QueueView()
         case let .lyrics(track):
             LyricsView(track: track)
-        case let .artist(artist):
-            ArtistView(artist: artist)
+        case let .artist(track):
+            NavigationStack {
+                TrackArtistsDestinationView(track: track)
+            }
+        case let .album(track):
+            NavigationStack {
+                TrackAlbumDestinationView(track: track)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(L10n.text("Готово")) {
+                                presentedSheet = nil
+                            }
+                        }
+                    }
+            }
         case let .playlists(track):
             AddToPlaylistView(track: track)
         case .settings:
@@ -858,7 +871,12 @@ struct PlayerView: View {
                 },
                 onArtist: {
                     deferFromActionSheet(
-                        .sheet(.artist(track.artist))
+                        .sheet(.artist(track))
+                    )
+                },
+                onAlbum: {
+                    deferFromActionSheet(
+                        .sheet(.album(track))
                     )
                 },
                 onPlaylist: {
@@ -1001,33 +1019,12 @@ struct PlayerView: View {
         Task {
             defer { isUpdatingLibrary = false }
             do {
-                if removing {
-                    let stored = libraryStore.storedTrack(for: track) ?? track
-                    try await environment.withAuthorizedToken { token in
-                        try await environment.musicService.removeFromLibrary(
-                            stored,
-                            accessToken: token
-                        )
-                    }
-                    libraryStore.markRemoved(track)
-                    libraryStore.markRemoved(stored)
-                    MusicLibraryEvents.postRemoved(stored)
-                    if player.currentTrack?.id == track.id {
-                        isInLibrary = false
-                    }
-                } else {
-                    let added = try await environment.withAuthorizedToken {
-                        token in
-                        try await environment.musicService.addToLibrary(
-                            track,
-                            accessToken: token
-                        )
-                    }
-                    libraryStore.markAdded(source: track, stored: added)
-                    MusicLibraryEvents.postAdded(added)
-                    if player.currentTrack?.id == track.id {
-                        isInLibrary = true
-                    }
+                let resultingState = try await environment.setTrackLiked(
+                    track,
+                    desiredState: !removing
+                )
+                if player.currentTrack?.id == track.id {
+                    isInLibrary = resultingState
                 }
                 Haptics.selection()
             } catch is CancellationError {
@@ -1293,7 +1290,8 @@ struct PlayerLayoutMetrics: Equatable {
 private enum PlayerSheet: Identifiable {
     case queue
     case lyrics(Track)
-    case artist(String)
+    case artist(Track)
+    case album(Track)
     case playlists(Track)
     case settings
     case actions(Track)
@@ -1304,8 +1302,10 @@ private enum PlayerSheet: Identifiable {
             return "queue"
         case let .lyrics(track):
             return "lyrics-\(track.id)"
-        case let .artist(artist):
-            return "artist-\(artist)"
+        case let .artist(track):
+            return "artist-\(track.id)"
+        case let .album(track):
+            return "album-\(track.id)"
         case let .playlists(track):
             return "playlists-\(track.id)"
         case .settings:
@@ -1422,6 +1422,7 @@ private struct PlayerActionsSheet: View {
     let onDismiss: () -> Void
     let onLibrary: () -> Void
     let onArtist: () -> Void
+    let onAlbum: () -> Void
     let onPlaylist: () -> Void
     let onShare: () -> Void
     let onCopyLink: () -> Void
@@ -1455,9 +1456,15 @@ private struct PlayerActionsSheet: View {
                         sectionTitle("Действия с треком")
                         LazyVGrid(columns: columns, spacing: 10) {
                             actionTile(
-                                "Исполнитель",
+                                "Открыть артиста",
                                 systemImage: "person.wave.2",
                                 action: onArtist
+                            )
+                            actionTile(
+                                "Открыть альбом",
+                                systemImage: "square.stack",
+                                enabled: TrackAlbumNavigation.canOpen(track),
+                                action: onAlbum
                             )
                             actionTile(
                                 "Добавить в плейлист",

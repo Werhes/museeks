@@ -45,6 +45,7 @@ enum AlbumTrackRequestPolicy {
 struct VKMusicService: MusicService {
     private let client: APIClient
     private let apiVersion: String
+    private let deviceID: String?
     private let context: VKMusicContext
     private let lyricsService = LRCLyricsService()
     private let geniusLyricsService = GeniusLyricsService()
@@ -52,10 +53,14 @@ struct VKMusicService: MusicService {
     init(
         client: APIClient,
         apiVersion: String,
-        initialUserID: Int? = nil
+        initialUserID: Int? = nil,
+        deviceID: String? = nil
     ) {
         self.client = client
         self.apiVersion = apiVersion
+        self.deviceID = deviceID?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
         self.context = VKMusicContext(userID: initialUserID)
     }
 
@@ -189,13 +194,15 @@ struct VKMusicService: MusicService {
         do {
             let envelope: VKResponse<JSONValue> = try await client.post(
                 path: "/method/catalog.getAudio",
-                form: common(accessToken).merging([
-                    "need_blocks": "1"
-                ]) { _, new in new },
+                form: common(accessToken).merging(
+                    withDeviceID([
+                        "need_blocks": "1",
+                        "extended": "1"
+                    ])
+                ) { _, new in new },
                 responseType: VKResponse<JSONValue>.self
             )
             mixes = envelope.response.musicMixes
-            releases = envelope.response.releaseAlbums
             sections = envelope.response.catalogSections
         } catch is CancellationError {
             throw CancellationError()
@@ -231,7 +238,10 @@ struct VKMusicService: MusicService {
             mixes = mergingMixes(mixes, hydrated)
         }
 
-        if releases.isEmpty, !releaseSections.isEmpty {
+        // Only albums returned by a real VK releases section belong on the
+        // home screen. Recursively scanning the whole root payload also sees
+        // album metadata attached to ordinary and user-library tracks.
+        if !releaseSections.isEmpty {
             let hydrated = await hydrateSections(
                 releaseSections,
                 accessToken: accessToken
@@ -257,59 +267,135 @@ struct VKMusicService: MusicService {
         return snapshot.newReleases
     }
 
+    /// Loads the «Обзор» shelf catalog from the real VK section. The section
+    /// id is resolved from `catalog.getAudio` (the section titled «Обзор»),
+    /// then `catalog.getSection` returns ordered shelves + embedded metadata.
+    func overviewCatalog(accessToken: String) async throws -> VKOverviewCatalog {
+        var sectionID: String?
+        do {
+            let envelope: VKResponse<JSONValue> = try await client.post(
+                path: "/method/catalog.getAudio",
+                form: common(accessToken).merging(
+                    withDeviceID([
+                        "need_blocks": "1",
+                        "extended": "1"
+                    ])
+                ) { _, new in new },
+                responseType: VKResponse<JSONValue>.self
+            )
+            sectionID = envelope.response.overviewSectionID
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as APIError where error == .unauthorized {
+            throw error
+        } catch let error as APIError where error.isConnectivityFailure {
+            throw error
+        } catch {
+            // Fall back to catalog.getSection without a root id below.
+        }
+
+        let payload: JSONValue
+        if let sectionID, !sectionID.isEmpty {
+            let envelope: VKResponse<JSONValue> = try await client.post(
+                path: "/method/catalog.getSection",
+                form: common(accessToken).merging(
+                    withDeviceID([
+                        "section_id": sectionID,
+                        "need_blocks": "1",
+                        "extended": "1"
+                    ])
+                ) { _, new in new },
+                responseType: VKResponse<JSONValue>.self
+            )
+            payload = envelope.response
+        } else {
+            let envelope: VKResponse<JSONValue> = try await client.post(
+                path: "/method/catalog.getSection",
+                form: common(accessToken).merging(
+                    withDeviceID([
+                        "section_id": VKOverviewSectionID.explore,
+                        "need_blocks": "1",
+                        "extended": "1"
+                    ])
+                ) { _, new in new },
+                responseType: VKResponse<JSONValue>.self
+            )
+            payload = envelope.response
+        }
+
+        let shelves = payload.overviewShelves
+        let banners = payload.overviewBannerURLs
+        guard !shelves.isEmpty || !banners.isEmpty else {
+            throw APIError.invalidResponse
+        }
+        return VKOverviewCatalog(shelves: shelves, bannerURLs: banners)
+    }
+
+    func mixSettings(
+        _ mix: MusicMix,
+        accessToken: String
+    ) async throws -> VKMixSettings {
+        let envelope: VKResponse<VKMixSettingsRoot> = try await client.post(
+            path: "/method/audio.getStreamMixSettings",
+            form: common(accessToken).merging(
+                withDeviceID(VKMixRequestParameters.settings(for: mix))
+            ) { _, new in new },
+            responseType: VKResponse<VKMixSettingsRoot>.self
+        )
+        return envelope.response.settings
+    }
+
     func mixTracks(
         _ mix: MusicMix,
         accessToken: String,
-        startingOffset: Int,
+        startingAppend: Int,
         pages: Int
     ) async throws -> [Track] {
         let userID = try await resolvedUserID(accessToken: accessToken)
         let pageSize = MixTrackRequestPolicy.pageSize
         let pageCount = max(pages, 1)
-        let baseOffset = max(startingOffset, 0)
-        let offsets = (0..<pageCount).map { baseOffset + $0 * pageSize }
-        let collectedPages = try await withThrowingTaskGroup(
-            of: (offset: Int, tracks: [Track]).self
-        ) { group -> [(offset: Int, tracks: [Track])] in
-            for offset in offsets {
-                group.addTask {
-                    do {
-                        let envelope: VKResponse<JSONValue> = try await client
-                            .post(
-                                path: "/method/audio.getStreamMixAudios",
-                                form: common(accessToken).merging([
-                                    "mix_id": mix.id,
-                                    "count": String(pageSize),
-                                    "offset": String(offset)
-                                ]) { _, new in new },
-                                responseType: VKResponse<JSONValue>.self
-                            )
-                        let resolved = envelope.response.tracks.map {
-                            $0.resolvingStreamURL(userID: userID)
-                        }
-                        return (offset, resolved)
-                    } catch is CancellationError {
-                        throw CancellationError()
-                    } catch {
-                        return (offset, [])
-                    }
-                }
-            }
-            var collected: [(offset: Int, tracks: [Track])] = []
-            for try await page in group {
-                collected.append(page)
-            }
-            return collected
-        }
         var known = Set<String>()
         var tracks: [Track] = []
-        for page in collectedPages.sorted(by: { $0.offset < $1.offset }) {
-            for track in page.tracks where known.insert(track.id).inserted {
-                tracks.append(track)
+        for page in 0..<pageCount {
+            try Task.checkCancellation()
+            let requestForm = VKMixRequestParameters.tracks(
+                for: mix,
+                append: startingAppend > 0 || page > 0,
+                count: pageSize
+            )
+            do {
+                let envelope: VKResponse<JSONValue> = try await client.post(
+                    path: "/method/audio.getStreamMixAudios",
+                    form: common(accessToken).merging(
+                        withDeviceID(requestForm)
+                    ) { _, new in new },
+                    responseType: VKResponse<JSONValue>.self
+                )
+                let resolved = envelope.response.tracks.map {
+                    $0.resolvingStreamURL(userID: userID)
+                }
+                for track in resolved where known.insert(track.id).inserted {
+                    tracks.append(track)
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                if tracks.isEmpty { throw error }
+                break
+            }
+            if tracks.count >= MixTrackRequestPolicy.queueLimit {
+                break
+            }
+            if page + 1 < pageCount {
+                try await Task.sleep(for: .milliseconds(120))
             }
         }
         guard !tracks.isEmpty else { throw APIError.invalidResponse }
         return Array(tracks.prefix(MixTrackRequestPolicy.queueLimit))
+    }
+
+    private struct VKMixSettingsRoot: Decodable, Sendable {
+        let settings: VKMixSettings
     }
 
     func search(
@@ -1113,12 +1199,22 @@ struct VKMusicService: MusicService {
     }
 
     private func common(_ token: String) -> [String: String] {
-        [
+        var parameters = [
             "access_token": token,
             "v": apiVersion,
             "https": "1",
             "lang": "ru"
         ]
+        return parameters
+    }
+
+    private func withDeviceID(
+        _ parameters: [String: String]
+    ) -> [String: String] {
+        guard let deviceID, !deviceID.isEmpty else { return parameters }
+        var result = parameters
+        result["device_id"] = deviceID
+        return result
     }
 
     /// Ensures stream URL unmasking has a user id (from context or users.get).
@@ -1144,9 +1240,13 @@ struct VKMusicService: MusicService {
     ) async throws -> JSONValue {
         let envelope: VKResponse<JSONValue> = try await client.post(
             path: "/method/catalog.getSection",
-            form: common(accessToken).merging([
-                "section_id": sectionID
-            ]) { _, new in new },
+            form: common(accessToken).merging(
+                withDeviceID([
+                    "section_id": sectionID,
+                    "need_blocks": "1",
+                    "extended": "1"
+                ])
+            ) { _, new in new },
             responseType: VKResponse<JSONValue>.self
         )
         return envelope.response
@@ -1185,10 +1285,17 @@ struct VKMusicService: MusicService {
         _ lhs: [MusicMix],
         _ rhs: [MusicMix]
     ) -> [MusicMix] {
-        var known = Set(lhs.map(\.id))
         var result = lhs
-        for mix in rhs where known.insert(mix.id).inserted {
-            result.append(mix)
+        var indexes = Dictionary(
+            uniqueKeysWithValues: result.enumerated().map { ($0.element.id, $0.offset) }
+        )
+        for mix in rhs {
+            if let index = indexes[mix.id] {
+                result[index] = result[index].merging(richer: mix)
+            } else {
+                indexes[mix.id] = result.count
+                result.append(mix)
+            }
         }
         return result
     }

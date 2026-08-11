@@ -860,6 +860,7 @@ private struct DownloadedTrackRow: View {
     let onDelete: () -> Void
     let onLongPress: () -> Void
     let onToggleSelection: () -> Void
+    @State private var detailDestination: TrackDetailDestination?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -924,6 +925,24 @@ private struct DownloadedTrackRow: View {
                     Button(action: onPlay) {
                         Label("Воспроизвести", systemImage: "play.fill")
                     }
+                    Button {
+                        detailDestination = .artists(record.track)
+                    } label: {
+                        Label(
+                            "Открыть артиста",
+                            systemImage: "person.crop.circle"
+                        )
+                    }
+                    if TrackAlbumNavigation.canOpen(record.track) {
+                        Button {
+                            detailDestination = .album(record.track)
+                        } label: {
+                            Label(
+                                "Открыть альбом",
+                                systemImage: "square.stack"
+                            )
+                        }
+                    }
                     Button(action: onShare) {
                         Label(
                             "Поделиться аудиофайлом",
@@ -963,6 +982,9 @@ private struct DownloadedTrackRow: View {
         }
         .onLongPressGesture {
             onLongPress()
+        }
+        .sheet(item: $detailDestination) { destination in
+            TrackDestinationSheet(destination: destination)
         }
     }
 

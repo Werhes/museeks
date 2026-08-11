@@ -17,8 +17,13 @@ struct LibraryView: View {
     @StateObject private var tracks = TrackCollectionViewModel(source: .library)
     @StateObject private var playlists = PlaylistLibraryViewModel()
     @State private var showingEditor = false
-    @State private var pendingCellularDownload: Track?
+    @State private var pendingCellularDownload: LibraryDownloadRequest?
     @State private var sharingTrack: Track?
+    @State private var detailDestination: TrackDetailDestination?
+    @State private var isPreparingShuffle = false
+    @State private var isDownloadingAll = false
+    @State private var bulkDownloadCompleted = 0
+    @State private var bulkDownloadTotal = 0
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -35,14 +40,7 @@ struct LibraryView: View {
                         albumShelf
                     }
 
-                    HStack {
-                        Text("Треки")
-                            .font(.title2.weight(.bold))
-                        Spacer()
-                        Text("\(tracks.totalCount)")
-                            .font(.subheadline.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
+                    libraryTracksHeader
 
                     if tracks.isLoading && tracks.tracks.isEmpty {
                         trackSkeleton
@@ -106,6 +104,9 @@ struct LibraryView: View {
         .navigationBarTitleDisplayMode(.inline)
         .dynamicTypeSize(...DynamicTypeSize.large)
         .trackShareSheet(track: $sharingTrack)
+        .sheet(item: $detailDestination) { destination in
+            TrackDestinationSheet(destination: destination)
+        }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if OfflineDownloadsFeature.showsControls,
@@ -164,9 +165,15 @@ struct LibraryView: View {
             )
         ) {
             Button(L10n.text("Скачать")) {
-                if let track = pendingCellularDownload {
-                    pendingCellularDownload = nil
+                let request = pendingCellularDownload
+                pendingCellularDownload = nil
+                switch request {
+                case let .some(.track(track)):
                     performDownload(track)
+                case .some(.all):
+                    performDownloadAll()
+                case .none:
+                    break
                 }
             }
             Button(L10n.text("Отмена"), role: .cancel) {
@@ -220,6 +227,76 @@ struct LibraryView: View {
         ) { _ in
             Task { await loadAlbums() }
         }
+    }
+
+    private var libraryTracksHeader: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(L10n.text("Мои треки"))
+                    .font(.title2.weight(.bold))
+                Spacer()
+                Text("\(tracks.totalCount)")
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    shuffleAllTracks()
+                } label: {
+                    Label {
+                        Text(L10n.text("Перемешать всё"))
+                            .lineLimit(1)
+                    } icon: {
+                        if isPreparingShuffle {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "shuffle")
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(
+                    tracks.tracks.isEmpty
+                        || isPreparingShuffle
+                        || isDownloadingAll
+                )
+
+                if OfflineDownloadsFeature.showsControls {
+                    Button {
+                        requestDownloadAll()
+                    } label: {
+                        Label {
+                            Text(downloadAllButtonTitle)
+                                .lineLimit(1)
+                        } icon: {
+                            if isDownloadingAll {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "arrow.down.circle")
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(
+                        tracks.tracks.isEmpty
+                            || isPreparingShuffle
+                            || isDownloadingAll
+                            || environment.isShareSessionActive
+                    )
+                }
+            }
+            .font(.subheadline.weight(.semibold))
+        }
+    }
+
+    private var downloadAllButtonTitle: String {
+        guard isDownloadingAll, bulkDownloadTotal > 0 else {
+            return L10n.text("Скачать всё")
+        }
+        return "\(bulkDownloadCompleted)/\(bulkDownloadTotal)"
     }
 
     @ViewBuilder
@@ -438,6 +515,26 @@ struct LibraryView: View {
                 }
                 Button {
                     Haptics.open()
+                    detailDestination = .artists(track)
+                } label: {
+                    Label(
+                        "Открыть артиста",
+                        systemImage: "person.crop.circle"
+                    )
+                }
+                if TrackAlbumNavigation.canOpen(track) {
+                    Button {
+                        Haptics.open()
+                        detailDestination = .album(track)
+                    } label: {
+                        Label(
+                            "Открыть альбом",
+                            systemImage: "square.stack"
+                        )
+                    }
+                }
+                Button {
+                    Haptics.open()
                     sharingTrack = track
                 } label: {
                     Label(
@@ -493,7 +590,7 @@ struct LibraryView: View {
             return
         }
         if networkMonitor.transport == .cellular {
-            pendingCellularDownload = track
+            pendingCellularDownload = .track(track)
         } else {
             performDownload(track)
         }
@@ -520,6 +617,125 @@ struct LibraryView: View {
                 )
             }
         }
+    }
+
+    private func shuffleAllTracks() {
+        guard !isPreparingShuffle, !isDownloadingAll else { return }
+        isPreparingShuffle = true
+        Task {
+            defer { isPreparingShuffle = false }
+            do {
+                let allTracks = try await fetchAllLibraryTracks()
+                guard let first = allTracks.randomElement() else { return }
+                if !player.shuffleEnabled {
+                    player.toggleShuffle()
+                }
+                player.play(first, in: allTracks)
+                Haptics.selection()
+            } catch is CancellationError {
+                return
+            } catch {
+                Haptics.error()
+                player.errorMessage = L10n.format(
+                    "Не удалось загрузить все треки: %@",
+                    error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func requestDownloadAll() {
+        guard !isPreparingShuffle, !isDownloadingAll else { return }
+        if networkMonitor.transport == .cellular {
+            pendingCellularDownload = .all
+        } else {
+            performDownloadAll()
+        }
+    }
+
+    private func performDownloadAll() {
+        guard !isPreparingShuffle, !isDownloadingAll else { return }
+        isDownloadingAll = true
+        bulkDownloadCompleted = 0
+        bulkDownloadTotal = 0
+        Task {
+            defer {
+                isDownloadingAll = false
+                bulkDownloadCompleted = 0
+                bulkDownloadTotal = 0
+            }
+            do {
+                let allTracks = try await fetchAllLibraryTracks()
+                let missing = allTracks.filter { !offlineStore.contains($0) }
+                bulkDownloadTotal = missing.count
+                guard !missing.isEmpty else {
+                    Haptics.success()
+                    return
+                }
+
+                var failureCount = 0
+                var firstError: Error?
+                for track in missing {
+                    try Task.checkCancellation()
+                    do {
+                        try await environment.downloadForOffline(track)
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        failureCount += 1
+                        firstError = firstError ?? error
+                    }
+                    bulkDownloadCompleted += 1
+                }
+
+                if failureCount == 0 {
+                    Haptics.success()
+                    DownloadNotifications.notifyDownloadComplete(
+                        title: L10n.text("Все треки сохранены офлайн")
+                    )
+                } else {
+                    Haptics.error()
+                    player.errorMessage = L10n.format(
+                        "Не удалось скачать %d треков: %@",
+                        failureCount,
+                        firstError?.localizedDescription ?? L10n.text("Ошибка загрузки")
+                    )
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                Haptics.error()
+                player.errorMessage = L10n.format(
+                    "Не удалось загрузить список треков: %@",
+                    error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func fetchAllLibraryTracks() async throws -> [Track] {
+        var collected: [Track] = []
+        var known = Set<String>()
+        var offset = 0
+        var pageCount = 0
+
+        while pageCount < 100 {
+            try Task.checkCancellation()
+            let page = try await environment.withAuthorizedToken { token in
+                try await environment.musicService.library(
+                    accessToken: token,
+                    offset: offset,
+                    count: 100
+                )
+            }
+            collected.append(contentsOf: page.items.filter {
+                known.insert($0.id).inserted
+            })
+            pageCount += 1
+            guard let next = page.nextOffset, next > offset else { break }
+            offset = next
+        }
+        return collected
     }
 
     private var playlistSkeleton: some View {
@@ -680,4 +896,9 @@ struct LibraryView: View {
             }
         }
     }
+}
+
+private enum LibraryDownloadRequest {
+    case track(Track)
+    case all
 }

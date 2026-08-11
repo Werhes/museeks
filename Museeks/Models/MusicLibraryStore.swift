@@ -4,6 +4,7 @@ import Foundation
 final class MusicLibraryStore: ObservableObject {
     @Published private(set) var signatures = Set<String>()
     private var tracksBySignature: [String: Track] = [:]
+    private var explicitlyRemovedSignatures = Set<String>()
     private var refreshGeneration = 0
 
     /// Callers that fetch a full remote library page must obtain this ID and
@@ -18,6 +19,7 @@ final class MusicLibraryStore: ObservableObject {
     func replace(with tracks: [Track], refreshID: Int) {
         guard refreshID == refreshGeneration else { return }
         signatures = Set(tracks.map(Self.signature))
+        explicitlyRemovedSignatures.subtract(signatures)
         tracksBySignature = Dictionary(
             tracks.map { (Self.signature($0), $0) },
             uniquingKeysWith: { current, _ in current }
@@ -29,7 +31,11 @@ final class MusicLibraryStore: ObservableObject {
     }
 
     func isLiked(_ track: Track, currentUserID: Int?) -> Bool {
-        contains(track)
+        let signature = Self.signature(track)
+        guard !explicitlyRemovedSignatures.contains(signature) else {
+            return false
+        }
+        return signatures.contains(signature)
             || (currentUserID != nil && track.ownerID == currentUserID)
     }
 
@@ -39,6 +45,8 @@ final class MusicLibraryStore: ObservableObject {
         let storedSignature = Self.signature(stored)
         signatures.insert(sourceSignature)
         signatures.insert(storedSignature)
+        explicitlyRemovedSignatures.remove(sourceSignature)
+        explicitlyRemovedSignatures.remove(storedSignature)
         tracksBySignature[sourceSignature] = stored
         tracksBySignature[storedSignature] = stored
     }
@@ -53,8 +61,10 @@ final class MusicLibraryStore: ObservableObject {
         for alias in aliases {
             signatures.remove(alias)
             tracksBySignature.removeValue(forKey: alias)
+            explicitlyRemovedSignatures.insert(alias)
         }
         signatures.remove(signature)
+        explicitlyRemovedSignatures.insert(signature)
     }
 
     func storedTrack(for track: Track) -> Track? {

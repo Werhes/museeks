@@ -71,12 +71,20 @@ final class VKCatalogArtistTests: XCTestCase {
             title: "Подкасты",
             url: "https://vk.com/audios0?section=podcasts"
         )
+        let userAlbums = CatalogSectionRef(
+            id: "sec-library-albums",
+            title: "Мои альбомы",
+            url: "https://vk.com/audios0?section=albums"
+        )
 
         XCTAssertTrue(CatalogSectionPolicy.looksLikeMixSection(mix))
         XCTAssertTrue(CatalogSectionPolicy.looksLikeMixSection(mood))
         XCTAssertTrue(CatalogSectionPolicy.looksLikeReleasesSection(releases))
         XCTAssertFalse(CatalogSectionPolicy.looksLikeMixSection(other))
         XCTAssertFalse(CatalogSectionPolicy.looksLikeReleasesSection(other))
+        XCTAssertFalse(
+            CatalogSectionPolicy.looksLikeReleasesSection(userAlbums)
+        )
     }
 
     func testMusicMixKeepsOfficialSectionTitle() {

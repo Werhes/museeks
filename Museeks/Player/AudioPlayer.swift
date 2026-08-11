@@ -407,6 +407,9 @@ final class AudioPlayer: ObservableObject {
     private var offlineInvalidationHandler: ((Track) -> Void)?
     private var offlinePlayedHandler: ((Track) -> Void)?
     private var playbackReadyHandler: ((Track, Bool) -> Void)?
+    private var remoteLikeStateProvider: ((Track) -> Bool)?
+    private var remoteLikeUpdateHandler: ((Track, Bool) async -> Bool)?
+    private var remoteLikeTask: Task<Void, Never>?
     private var loadedOfflineTrackID: String?
     private var listenedTrackID: String?
     private var listenedPlaybackDuration: TimeInterval = 0
@@ -641,6 +644,31 @@ final class AudioPlayer: ObservableObject {
         _ handler: @escaping (Track, Bool) -> Void
     ) {
         playbackReadyHandler = handler
+    }
+
+    func configureLibraryFeedback(
+        isLiked: @escaping (Track) -> Bool,
+        setLiked: @escaping (Track, Bool) async -> Bool
+    ) {
+        remoteLikeStateProvider = isLiked
+        remoteLikeUpdateHandler = setLiked
+        let command = MPRemoteCommandCenter.shared().likeCommand
+        command.localizedTitle = L10n.text("Добавить в медиатеку")
+        command.localizedShortTitle = L10n.text("Нравится")
+        refreshRemoteLikeState()
+    }
+
+    func refreshRemoteLikeState() {
+        let command = MPRemoteCommandCenter.shared().likeCommand
+        guard let track = currentTrack,
+              let remoteLikeStateProvider,
+              remoteLikeUpdateHandler != nil else {
+            command.isEnabled = false
+            command.isActive = false
+            return
+        }
+        command.isEnabled = true
+        command.isActive = remoteLikeStateProvider(track)
     }
 
     func configureNetwork(userAgent: String?) {
@@ -988,6 +1016,7 @@ final class AudioPlayer: ObservableObject {
         didAttemptStreamRefresh = false
         restoredTrackIDs.removeAll()
         nowPlaying.clear()
+        refreshRemoteLikeState()
         lastNowPlayingSecond = -1
         lastPersistedQueueSignature = ""
         defaults.removeObject(forKey: PlaybackSnapshot.key)
@@ -1053,6 +1082,7 @@ final class AudioPlayer: ObservableObject {
                 queueCount: queue.count,
                 queueIndex: currentIndex ?? 0
             )
+            refreshRemoteLikeState()
             return
         }
         errorMessage = nil
@@ -1136,6 +1166,7 @@ final class AudioPlayer: ObservableObject {
             queueCount: queue.count,
             queueIndex: currentIndex ?? 0
         )
+        refreshRemoteLikeState()
         persistPlayback()
     }
 
@@ -1455,6 +1486,7 @@ final class AudioPlayer: ObservableObject {
         center.nextTrackCommand.isEnabled = true
         center.previousTrackCommand.isEnabled = true
         center.changePlaybackPositionCommand.isEnabled = true
+        center.likeCommand.isEnabled = false
 
         remoteCommandTokens = [
             center.playCommand.addTarget { [weak self] _ in
@@ -1484,8 +1516,38 @@ final class AudioPlayer: ObservableObject {
                 }
                 self?.enqueueRemoteCommand(.seek(event.positionTime))
                 return .success
+            },
+            center.likeCommand.addTarget { [weak self] _ in
+                self?.enqueueRemoteLikeToggle()
+                return .success
             }
         ]
+    }
+
+    nonisolated private func enqueueRemoteLikeToggle() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            remoteLikeTask?.cancel()
+            remoteLikeTask = Task { @MainActor [weak self] in
+                guard let self,
+                      let track = currentTrack,
+                      let stateProvider = remoteLikeStateProvider,
+                      let updateHandler = remoteLikeUpdateHandler else {
+                    return
+                }
+                let desiredState = !stateProvider(track)
+                MPRemoteCommandCenter.shared().likeCommand.isActive =
+                    desiredState
+                let resultingState = await updateHandler(track, desiredState)
+                guard !Task.isCancelled,
+                      currentTrack?.id == track.id else {
+                    refreshRemoteLikeState()
+                    return
+                }
+                MPRemoteCommandCenter.shared().likeCommand.isActive =
+                    resultingState
+            }
+        }
     }
 
     /// Headphone / CarKit remotes often deliver pause+toggle in one burst.
@@ -2576,6 +2638,7 @@ final class AudioPlayer: ObservableObject {
                 queueIndex: currentIndex ?? 0
             )
         }
+        refreshRemoteLikeState()
     }
 }
 
