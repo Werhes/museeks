@@ -4,7 +4,7 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleDevelopmentRegion</key>
-  <string>ru</string>
+  <string>$(DEVELOPMENT_LANGUAGE)</string>
   <key>CFBundleDisplayName</key>
   <string>Museeks</string>
   <key>CFBundleExecutable</key>
@@ -21,30 +21,39 @@
   <string>$(MARKETING_VERSION)</string>
   <key>CFBundleVersion</key>
   <string>$(CURRENT_PROJECT_VERSION)</string>
-  <key>ITSAppUsesNonExemptEncryption</key>
-  <false/>
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright © 2026 Werhes</string>
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.music</string>
   <key>LSRequiresIPhoneOS</key>
   <true/>
+  <key>ITSAppUsesNonExemptEncryption</key>
+  <false/>
   <key>UIApplicationSupportsIndirectInputEvents</key>
   <true/>
+  <key>CADisableMinimumFrameDurationOnPhone</key>
+  <true/>
+  <!-- Required when building with the iOS 27 SDK (TN3187): without a
+       scene manifest, UIKit fails launch. SwiftUI WindowGroup owns the
+       scene; this plist only declares adoption. -->
   <key>UIApplicationSceneManifest</key>
   <dict>
     <key>UIApplicationSupportsMultipleScenes</key>
     <false/>
   </dict>
-  <key>UIBackgroundModes</key>
-  <array>
-    <string>audio</string>
-  </array>
   <key>UILaunchScreen</key>
   <dict>
     <key>UIColorName</key>
     <string>LaunchBackground</string>
     <key>UIImageName</key>
-    <string>LaunchIcon</string>
+    <string>LaunchMark</string>
+    <key>UIImageRespectsSafeAreaInsets</key>
+    <true/>
   </dict>
+  <key>UIBackgroundModes</key>
+  <array>
+    <string>audio</string>
+  </array>
   <key>UISupportedInterfaceOrientations</key>
   <array>
     <string>UIInterfaceOrientationPortrait</string>
@@ -56,5 +65,11 @@
     <string>UIInterfaceOrientationLandscapeLeft</string>
     <string>UIInterfaceOrientationLandscapeRight</string>
   </array>
+  <key>VK_API_BASE_URL</key>
+  <string>https://api.vk.ru</string>
+  <key>PROJECT_URL</key>
+  <string>https://github.com/Werhes/museeks</string>
+  <key>ISSUES_URL</key>
+  <string>https://github.com/Werhes/museeks/issues</string>
 </dict>
 </plist>

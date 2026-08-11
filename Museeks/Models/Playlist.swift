@@ -1,93 +1,134 @@
 import Foundation
 
-struct Playlist: Codable, Identifiable, Hashable, Sendable {
-    let playlistID: Int
+enum PlaylistSource: String, Codable, Hashable, Sendable {
+    case vk
+
+    var title: String {
+        switch self {
+        case .vk: L10n.text("VK Музыка")
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .vk: "VK"
+        }
+    }
+}
+
+struct Playlist: Codable, Hashable, Identifiable, Sendable {
+    let id: Int
     let ownerID: Int
     let title: String
-    let subtitle: String?
+    let description: String?
     let count: Int
     let artworkURL: URL?
     let accessKey: String?
 
-    var id: String { "\(ownerID)_\(playlistID)" }
+    var source: PlaylistSource { .vk }
 
-    enum CodingKeys: String, CodingKey {
-        case playlistID = "id"
-        case ownerID = "owner_id"
-        case title
-        case subtitle = "description"
-        case count
-        case artworkURL = "artwork_url"
-        case photo300 = "photo_300"
-        case photo600 = "photo_600"
-        case photo
-        case thumbs
-        case accessKey = "access_key"
+    /// Returns a copy with a refreshed track count. Used after the offline
+    /// download resolves the real track list so the stored playlist metadata
+    /// never keeps a stale `count == 0`.
+    func updatingCount(_ newCount: Int) -> Playlist {
+        Playlist(
+            id: id,
+            ownerID: ownerID,
+            title: title,
+            description: description,
+            count: newCount,
+            artworkURL: artworkURL,
+            accessKey: accessKey
+        )
     }
 
-    init(from decoder: Decoder) throws {
-        let box = try decoder.container(keyedBy: CodingKeys.self)
-        playlistID = try box.decode(Int.self, forKey: .playlistID)
-        ownerID = try box.decode(Int.self, forKey: .ownerID)
-        title = try box.decodeIfPresent(String.self, forKey: .title) ?? "Плейлист"
-        subtitle = try box.decodeIfPresent(String.self, forKey: .subtitle)
-        count = try box.decodeIfPresent(Int.self, forKey: .count) ?? 0
-        accessKey = try box.decodeIfPresent(String.self, forKey: .accessKey)
-        var raw = try box.decodeIfPresent(String.self, forKey: .artworkURL)
-            ?? box.decodeIfPresent(String.self, forKey: .photo600)
-            ?? box.decodeIfPresent(String.self, forKey: .photo300)
-        if raw == nil, let photo = try? box.decode(PlaylistPhoto.self, forKey: .photo) {
-            raw = photo.photo1200 ?? photo.photo600 ?? photo.photo300
-        }
-        if raw == nil, let thumbs = try? box.decode([PlaylistThumb].self, forKey: .thumbs) {
-            raw = thumbs.max { ($0.width ?? 0) < ($1.width ?? 0) }?.url
-        }
-        artworkURL = raw.flatMap(URL.init(string:))
-    }
-
+    /// Explicit memberwise initializer. `init(from:)` suppresses the
+    /// synthesized one, and the offline store builds copies with a refreshed
+    /// track count.
     init(
-        playlistID: Int,
+        id: Int,
         ownerID: Int,
         title: String,
-        subtitle: String?,
+        description: String? = nil,
         count: Int,
-        artworkURL: URL?,
-        accessKey: String?
+        artworkURL: URL? = nil,
+        accessKey: String? = nil
     ) {
-        self.playlistID = playlistID
+        self.id = id
         self.ownerID = ownerID
         self.title = title
-        self.subtitle = subtitle
+        self.description = description
         self.count = count
         self.artworkURL = artworkURL
         self.accessKey = accessKey
     }
 
-    func encode(to encoder: Encoder) throws {
-        var box = encoder.container(keyedBy: CodingKeys.self)
-        try box.encode(playlistID, forKey: .playlistID)
-        try box.encode(ownerID, forKey: .ownerID)
-        try box.encode(title, forKey: .title)
-        try box.encodeIfPresent(subtitle, forKey: .subtitle)
-        try box.encode(count, forKey: .count)
-        try box.encodeIfPresent(artworkURL, forKey: .artworkURL)
-        try box.encodeIfPresent(accessKey, forKey: .accessKey)
-    }
-}
-
-private struct PlaylistPhoto: Decodable {
-    let photo1200: String?
-    let photo600: String?
-    let photo300: String?
-
     enum CodingKeys: String, CodingKey {
-        case photo1200 = "photo_1200"
+        case id
+        case ownerID = "owner_id"
+        case title
+        case description
+        case count
         case photo600 = "photo_600"
         case photo300 = "photo_300"
+        case photo
+        case thumb
+        case accessKey = "access_key"
     }
-}
 
-private struct PlaylistThumb: Decodable {
-    let url: String
-    let width: Int?
+    private enum ThumbKeys: String, CodingKey {
+        case photo600 = "photo_600"
+        case photo300 = "photo_300"
+        case photo270 = "photo_270"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        ownerID = try container.decode(Int.self, forKey: .ownerID)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decodeIfPresent(
+            String.self,
+            forKey: .description
+        )
+        count = try container.decodeIfPresent(Int.self, forKey: .count) ?? 0
+        accessKey = try container.decodeIfPresent(
+            String.self,
+            forKey: .accessKey
+        )
+        var rawArtwork = try container.decodeIfPresent(
+            String.self,
+            forKey: .photo600
+        ) ?? container.decodeIfPresent(String.self, forKey: .photo300)
+        if rawArtwork == nil {
+            for key in [CodingKeys.thumb, .photo] {
+                guard let thumb = try? container.nestedContainer(
+                    keyedBy: ThumbKeys.self,
+                    forKey: key
+                ) else { continue }
+                rawArtwork = try thumb.decodeIfPresent(
+                    String.self,
+                    forKey: .photo600
+                )
+                    ?? thumb.decodeIfPresent(String.self, forKey: .photo300)
+                    ?? thumb.decodeIfPresent(String.self, forKey: .photo270)
+                if rawArtwork != nil { break }
+            }
+        }
+        artworkURL = rawArtwork.flatMap(URL.secureRemoteURL)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(ownerID, forKey: .ownerID)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encode(count, forKey: .count)
+        try container.encodeIfPresent(
+            artworkURL?.absoluteString,
+            forKey: .photo600
+        )
+        try container.encodeIfPresent(accessKey, forKey: .accessKey)
+    }
 }

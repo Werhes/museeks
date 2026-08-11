@@ -1,56 +1,165 @@
 import SwiftUI
 
 struct QueueView: View {
+    @EnvironmentObject private var player: AudioPlayer
+    @EnvironmentObject private var history: ListeningHistoryStore
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var player: PlayerController
+    @State private var radioMode: MixRadioMode = .balanced
+
+    private var isMixQueue: Bool {
+        if case .mix = player.queueSource { return true }
+        return false
+    }
 
     var body: some View {
         NavigationStack {
-            List {
-                if let index = player.currentIndex, player.queue.indices.contains(index) {
-                    Section("Сейчас играет") {
-                        TrackRow(
-                            track: player.queue[index],
-                            isCurrent: true,
-                            isPlaying: player.isPlaying
-                        ) { player.playPause() }
+            Group {
+                if player.queue.isEmpty {
+                    EmptyStateView(
+                        title: "Очередь пуста",
+                        systemImage: "text.line.first.and.arrowtriangle.forward",
+                        description: "Выберите трек, чтобы начать воспроизведение."
+                    )
+                } else {
+                    List {
+                        if isMixQueue {
+                            Section {
+                                Picker(
+                                    L10n.text("Радио микса"),
+                                    selection: $radioMode
+                                ) {
+                                    ForEach(MixRadioMode.allCases) { mode in
+                                        Text(mode.title).tag(mode)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+                                .listRowBackground(Color.clear)
+                                .onChange(of: radioMode) { mode in
+                                    let artists = Set(
+                                        history.entries.prefix(40)
+                                            .map(\.track.artist)
+                                    )
+                                    player.rerankUpcomingMix(
+                                        mode: mode,
+                                        historyArtists: artists
+                                    )
+                                }
+                            } header: {
+                                Text(L10n.text("Радио микса"))
+                            } footer: {
+                                Text(
+                                    L10n.text(
+                                        "Переставляет уже загруженную очередь без новых запросов"
+                                    )
+                                )
+                            }
+                        }
+                        if let index = player.currentIndex {
+                            Text(
+                                L10n.format(
+                                    "Трек %d из %d",
+                                    index + 1,
+                                    player.queue.count
+                                )
+                            )
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                        }
+                        ForEach(
+                            Array(player.queue.enumerated()),
+                            id: \.element.id
+                        ) { index, track in
+                            Button {
+                                player.jump(to: index)
+                                dismiss()
+                            } label: {
+                                HStack(spacing: 12) {
+                                    AsyncArtwork(
+                                        url: track.artworkURL,
+                                        size: 48
+                                    )
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(track.title)
+                                            .font(.subheadline.weight(.semibold))
+                                            .lineLimit(1)
+                                        Text(track.artist)
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                    Spacer()
+                                    LikedTrackBadge(track: track)
+                                    if index == player.currentIndex {
+                                        PlaybackIndicatorView(
+                                            isPlaying: player.isPlaying
+                                        )
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(
+                                L10n.format(
+                                    "%@ — %@",
+                                    track.title,
+                                    track.artist
+                                )
+                            )
+                            .accessibilityValue(
+                                index == player.currentIndex
+                                    ? L10n.text("Сейчас играет")
+                                    : ""
+                            )
+                            .accessibilityHint(
+                                L10n.text("Воспроизвести из очереди")
+                            )
+                            .accessibilityAddTraits(
+                                index == player.currentIndex
+                                    ? .isSelected
+                                    : []
+                            )
+                            .accessibilityAction(
+                                named: L10n.text("Удалить из очереди")
+                            ) {
+                                removeFromQueue(at: index)
+                            }
+                            .swipeActions(
+                                edge: .trailing,
+                                allowsFullSwipe: true
+                            ) {
+                                Button(role: .destructive) {
+                                    removeFromQueue(at: index)
+                                } label: {
+                                    Label(
+                                        L10n.text("Удалить из очереди"),
+                                        systemImage: "trash"
+                                    )
+                                }
+                            }
+                        }
                     }
-                }
-                Section("Далее") {
-                    ForEach(upcoming) { item in
-                        TrackRow(track: item.track) { player.jump(to: item.queueIndex) }
-                    }
-                    .onDelete(perform: deleteUpcoming)
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
             }
+            .background(ThemeBackground())
             .navigationTitle("Очередь")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Готово") { dismiss() }
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
-    private var upcoming: [QueueItem] {
-        player.queue.enumerated().compactMap { index, track in
-            index == player.currentIndex ? nil : QueueItem(queueIndex: index, track: track)
+    private func removeFromQueue(at index: Int) {
+        Haptics.selection()
+        player.removeFromQueue(at: index)
+        if player.queue.isEmpty {
+            dismiss()
         }
     }
-
-    private func deleteUpcoming(at offsets: IndexSet) {
-        let items = upcoming
-        let queueOffsets = IndexSet(offsets.compactMap { offset in
-            items.indices.contains(offset) ? items[offset].queueIndex : nil
-        })
-        player.removeFromQueue(at: queueOffsets)
-    }
-}
-
-private struct QueueItem: Identifiable {
-    let queueIndex: Int
-    let track: Track
-    var id: String { track.id }
 }

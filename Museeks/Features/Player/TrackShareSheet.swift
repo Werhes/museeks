@@ -1,0 +1,542 @@
+import SwiftUI
+import UIKit
+
+enum TrackSharePayload: Equatable, Sendable {
+    case audioFile(URL)
+
+    var fileURL: URL {
+        switch self {
+        case let .audioFile(url):
+            return url
+        }
+    }
+
+    var identifier: String {
+        switch self {
+        case let .audioFile(url):
+            return "file-\(url.absoluteString)"
+        }
+    }
+}
+
+actor TrackShareService {
+    static let maximumFileSize: Int64 = 150_000_000
+    static let audioFileExtensions: Set<String> = ["mp3", "m4a", "aac", "wav", "flac"]
+
+    private let session: URLSession
+    private let fileManager: FileManager
+    private let hlsExporter: HLSSegmentExporter
+
+    init(
+        session: URLSession? = nil,
+        fileManager: FileManager = .default
+    ) {
+        if let session {
+            self.session = session
+        } else {
+            let configuration = URLSessionConfiguration.ephemeral
+            // Share exports compete with playback; give long-lived streams
+            // enough room so NSURLErrorTimedOut (-1001) is not the default.
+            configuration.timeoutIntervalForRequest = 120
+            configuration.timeoutIntervalForResource = 600
+            configuration.waitsForConnectivity = true
+            configuration.httpCookieStorage = nil
+            configuration.urlCache = nil
+            self.session = URLSession(configuration: configuration)
+        }
+        self.fileManager = fileManager
+        self.hlsExporter = HLSSegmentExporter(
+            session: session,
+            fileManager: fileManager
+        )
+    }
+
+    /// Creates a real audio attachment: direct streams are downloaded and
+    /// kept in their original format, HLS streams are exported to M4A.
+    /// HLS is never exposed as a link or a fake MP3 — renaming a playlist
+    /// would not create an audio file and would leak a temporary signed
+    /// address to the share sheet.
+    func preparePayload(
+        for track: Track,
+        userAgent: String?,
+        requiresMP3: Bool = false,
+        progress: TrackExportProgressHandler? = nil
+    ) async throws -> TrackSharePayload {
+        guard let streamURL = track.streamURL else {
+            throw directAudioUnavailableError
+        }
+        if isHLS(streamURL) {
+            guard !requiresMP3 else {
+                throw directMP3UnavailableError
+            }
+            return try await exportM4A(
+                from: streamURL,
+                track: track,
+                userAgent: userAgent,
+                progress: progress
+            )
+        }
+
+        await progress?(.downloadingDirectFile)
+        let (temporaryURL, response) = try await downloadDirectAudio(
+            from: streamURL,
+            userAgent: userAgent
+        )
+        try Task.checkCancellation()
+        guard let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode) else {
+            throw APIError.invalidResponse
+        }
+        guard !isHLS(response: http) else {
+            throw directAudioUnavailableError
+        }
+        guard isAudioResponse(http, sourceURL: streamURL) else {
+            throw APIError.invalidResponse
+        }
+        guard http.expectedContentLength <= Self.maximumFileSize
+                || http.expectedContentLength < 0 else {
+            throw fileTooLargeError
+        }
+        let downloadedSize = try fileSize(at: temporaryURL)
+        guard downloadedSize > 0,
+              downloadedSize <= Self.maximumFileSize else {
+            throw fileTooLargeError
+        }
+        guard !isHLSFile(at: temporaryURL) else {
+            throw directAudioUnavailableError
+        }
+        if requiresMP3 {
+            guard isLikelyMP3(at: temporaryURL) else {
+                throw directMP3UnavailableError
+            }
+        }
+
+        let destination = exportDestination(
+            for: track,
+            extensionName: requiresMP3
+                ? "mp3"
+                : try fileExtension(
+                    response: http,
+                    sourceURL: streamURL,
+                    downloadedURL: temporaryURL
+                )
+        )
+        do {
+            do {
+                try fileManager.moveItem(at: temporaryURL, to: destination)
+            } catch {
+                try fileManager.copyItem(at: temporaryURL, to: destination)
+            }
+            try Task.checkCancellation()
+            return .audioFile(destination)
+        } catch {
+            removeExportDirectory(containing: destination)
+            throw error
+        }
+    }
+
+    /// Downloads a direct audio URL once, retrying a single timed-out attempt
+    /// so transient `NSURLErrorTimedOut` (-1001) does not fail the share.
+    private func downloadDirectAudio(
+        from streamURL: URL,
+        userAgent: String?
+    ) async throws -> (URL, URLResponse) {
+        var lastError: Error?
+        for attempt in 0..<2 {
+            try Task.checkCancellation()
+            var request = URLRequest(url: streamURL)
+            request.timeoutInterval = 120
+            for (field, value) in requestHeaders(userAgent: userAgent) {
+                request.setValue(value, forHTTPHeaderField: field)
+            }
+            do {
+                return try await session.download(for: request)
+            } catch {
+                let mapped = mapShareTransportError(error)
+                lastError = mapped
+                if attempt == 0, isShareTimeout(mapped) {
+                    continue
+                }
+                throw mapped
+            }
+        }
+        throw lastError ?? APIError.timedOut
+    }
+
+    private func mapShareTransportError(_ error: Error) -> Error {
+        if error is CancellationError {
+            return error
+        }
+        if let urlError = error as? URLError, urlError.code == .timedOut {
+            return APIError.timedOut
+        }
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain,
+           nsError.code == NSURLErrorTimedOut {
+            return APIError.timedOut
+        }
+        return error
+    }
+
+    private func isShareTimeout(_ error: Error) -> Bool {
+        if case .timedOut = error as? APIError {
+            return true
+        }
+        if let urlError = error as? URLError, urlError.code == .timedOut {
+            return true
+        }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain
+            && nsError.code == NSURLErrorTimedOut
+    }
+
+    func payloadFromLocalFile(
+        _ sourceURL: URL,
+        track: Track,
+        requiresMP3: Bool = false,
+        progress: TrackExportProgressHandler? = nil
+    ) async throws -> TrackSharePayload {
+        guard sourceURL.isFileURL,
+              fileManager.fileExists(atPath: sourceURL.path) else {
+            throw directAudioUnavailableError
+        }
+        if sourceURL.hasDirectoryPath
+            || sourceURL.pathExtension.lowercased() == "movpkg" {
+            guard !requiresMP3 else {
+                throw directMP3UnavailableError
+            }
+            return try await exportM4A(
+                from: sourceURL,
+                track: track,
+                userAgent: nil,
+                progress: progress
+            )
+        }
+
+        let localSize = try fileSize(at: sourceURL)
+        guard localSize > 0,
+              localSize <= Self.maximumFileSize else {
+            throw fileTooLargeError
+        }
+        await progress?(.copyingLocalFile)
+        if requiresMP3 {
+            guard isLikelyMP3(at: sourceURL) else {
+                throw directMP3UnavailableError
+            }
+        }
+        let extensionName: String
+        if isLikelyMP3(at: sourceURL) {
+            extensionName = "mp3"
+        } else if isLikelyM4A(at: sourceURL) {
+            extensionName = "m4a"
+        } else {
+            let sourceExtension = sourceURL.pathExtension.lowercased()
+            guard Self.audioFileExtensions.contains(sourceExtension) else {
+                throw directAudioUnavailableError
+            }
+            extensionName = sourceExtension
+        }
+        let destination = exportDestination(
+            for: track,
+            extensionName: extensionName
+        )
+        do {
+            do {
+                try fileManager.linkItem(at: sourceURL, to: destination)
+            } catch {
+                do {
+                    try fileManager.copyItem(at: sourceURL, to: destination)
+                } catch {
+                    removeExportDirectory(containing: destination)
+                    throw error
+                }
+            }
+            try Task.checkCancellation()
+            return .audioFile(destination)
+        } catch {
+            removeExportDirectory(containing: destination)
+            throw error
+        }
+    }
+
+    func removeExportedFile(_ payload: TrackSharePayload) {
+        removeExportDirectory(containing: payload.fileURL)
+    }
+
+    /// Removes export directories that survived a previous crash: anything
+    /// older than `cutoff` inside `MuseeksShare` is discarded. The
+    /// offline source never lives under this root, so it is never touched.
+    func removeStaleExports(
+        olderThan cutoff: Date = Date().addingTimeInterval(-86_400)
+    ) {
+        guard let children = try? fileManager.contentsOfDirectory(
+            at: exportRoot,
+            includingPropertiesForKeys: [
+                .contentModificationDateKey,
+                .creationDateKey,
+                .isDirectoryKey
+            ],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return
+        }
+
+        for child in children {
+            let values = try? child.resourceValues(
+                forKeys: [
+                    .contentModificationDateKey,
+                    .creationDateKey,
+                    .isDirectoryKey
+                ]
+            )
+            guard values?.isDirectory == true else { continue }
+            let date = values?.contentModificationDate
+                ?? values?.creationDate
+                ?? .distantPast
+            if date < cutoff {
+                try? fileManager.removeItem(at: child)
+            }
+        }
+    }
+
+    private var fileTooLargeError: APIError {
+        APIError.server(
+            code: 413,
+            message: L10n.text("Файл больше 150 МБ.")
+        )
+    }
+
+    private var directAudioUnavailableError: APIError {
+        APIError.server(
+            code: 415,
+            message: L10n.text(
+                "VK не предоставил прямой аудиофайл для этого трека."
+            )
+        )
+    }
+
+    private var directMP3UnavailableError: APIError {
+        APIError.server(
+            code: 415,
+            message: L10n.text(
+                "Этот трек нельзя экспортировать в MP3."
+            )
+        )
+    }
+
+    private func isHLS(_ url: URL) -> Bool {
+        url.pathExtension.caseInsensitiveCompare("m3u8") == .orderedSame
+    }
+
+    private func isHLS(response: HTTPURLResponse) -> Bool {
+        let mime = response.mimeType?.lowercased() ?? ""
+        return mime.contains("mpegurl")
+            || mime.contains("m3u")
+            || response.url.map(isHLS) == true
+    }
+
+    private func isAudioResponse(
+        _ response: HTTPURLResponse,
+        sourceURL: URL
+    ) -> Bool {
+        let mime = response.mimeType?.lowercased() ?? ""
+        if mime.hasPrefix("audio/") {
+            return true
+        }
+        let fileExtension = sourceURL.pathExtension.lowercased()
+        return mime == "application/octet-stream"
+            && ["mp3", "m4a", "aac", "wav", "flac"].contains(fileExtension)
+    }
+
+    private func requestHeaders(userAgent: String?) -> [String: String] {
+        var headers = [
+            "Referer": "https://vk.com/",
+            "Origin": "https://vk.com"
+        ]
+        if let userAgent, !userAgent.isEmpty {
+            headers["User-Agent"] = userAgent
+        }
+        return headers
+    }
+
+    private func exportDestination(
+        for track: Track,
+        extensionName: String
+    ) -> URL {
+        let name = safeFilename("\(track.artist) — \(track.title)")
+        let directory = exportRoot
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try? fileManager.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        return directory
+            .appendingPathComponent(name)
+            .appendingPathExtension(extensionName)
+    }
+
+    private var exportRoot: URL {
+        fileManager.temporaryDirectory
+            .appendingPathComponent(
+                "MuseeksShare",
+                isDirectory: true
+            )
+            .standardizedFileURL
+    }
+
+    /// Removes the per-export UUID directory containing `url`. Guarded by a
+    /// prefix check against the share root so cleanup can never touch the
+    /// offline source or anything outside `MuseeksShare`.
+    private func removeExportDirectory(containing url: URL) {
+        let standardizedURL = url.standardizedFileURL
+        let parent = standardizedURL
+            .deletingLastPathComponent()
+            .standardizedFileURL
+
+        guard standardizedURL.isFileURL,
+              parent.path.hasPrefix(exportRoot.path + "/"),
+              parent != exportRoot else {
+            return
+        }
+        try? fileManager.removeItem(at: parent)
+    }
+
+    private func fileSize(at url: URL) throws -> Int64 {
+        let attributes = try fileManager.attributesOfItem(atPath: url.path)
+        return (attributes[.size] as? NSNumber)?.int64Value ?? 0
+    }
+
+    private func fileExtension(
+        response: HTTPURLResponse,
+        sourceURL: URL,
+        downloadedURL: URL
+    ) throws -> String {
+        if isLikelyMP3(at: downloadedURL) {
+            return "mp3"
+        }
+        if isLikelyM4A(at: downloadedURL) {
+            return "m4a"
+        }
+        switch response.mimeType?.lowercased() {
+        case "audio/mpeg", "audio/mp3": return "mp3"
+        case "audio/mp4", "audio/x-m4a": return "m4a"
+        case "audio/aac": return "aac"
+        case "audio/wav", "audio/x-wav": return "wav"
+        case "audio/flac": return "flac"
+        default: break
+        }
+        let sourceExtension = sourceURL.pathExtension.lowercased()
+        if ["mp3", "m4a", "aac", "wav", "flac"].contains(sourceExtension) {
+            return sourceExtension
+        }
+        throw directAudioUnavailableError
+    }
+
+    /// VK HLS streams (and offline `.movpkg` packages) cannot be passed to
+    /// `AVAssetExportSession` — AVFoundation reports them as non-exportable.
+    /// Instead the segments are stitched manually and transcoded into M4A
+    /// (PCM → AAC), following the approach of the open-source VKpyMusic
+    /// converter (https://github.com/issamansur/vkpymusic).
+    private func exportM4A(
+        from sourceURL: URL,
+        track: Track,
+        userAgent: String?,
+        progress: TrackExportProgressHandler?
+    ) async throws -> TrackSharePayload {
+        let destination = exportDestination(
+            for: track,
+            extensionName: "m4a"
+        )
+
+        do {
+            if sourceURL.isFileURL {
+                try await hlsExporter.exportMovpkgToM4A(
+                    packageURL: sourceURL,
+                    destination: destination,
+                    fileSizeLimit: Self.maximumFileSize,
+                    progress: progress
+                )
+            } else {
+                try await hlsExporter.exportToM4A(
+                    streamURL: sourceURL,
+                    headers: requestHeaders(userAgent: userAgent),
+                    destination: destination,
+                    fileSizeLimit: Self.maximumFileSize,
+                    progress: progress
+                )
+            }
+
+            try Task.checkCancellation()
+            guard isLikelyM4A(at: destination),
+                  (try? fileSize(at: destination)) ?? 0 > 0 else {
+                throw audioExportUnavailableError
+            }
+            return .audioFile(destination)
+        } catch {
+            removeExportDirectory(containing: destination)
+            throw error
+        }
+    }
+
+    private func isLikelyMP3(at url: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else {
+            return false
+        }
+        defer { try? handle.close() }
+        let prefix = (try? handle.read(upToCount: 3)) ?? Data()
+        if prefix.starts(with: Data("ID3".utf8)) {
+            return true
+        }
+        guard prefix.count >= 2 else { return false }
+        return prefix[prefix.startIndex] == 0xFF
+            && prefix[prefix.index(after: prefix.startIndex)] & 0xE0 == 0xE0
+    }
+
+    private func isLikelyM4A(at url: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else {
+            return false
+        }
+        defer { try? handle.close() }
+        let prefix = (try? handle.read(upToCount: 12)) ?? Data()
+        guard prefix.count >= 12 else { return false }
+        let typeData = prefix.subdata(in: 4..<8)
+        return String(data: typeData, encoding: .ascii) == "ftyp"
+    }
+
+    private var audioExportUnavailableError: APIError {
+        APIError.server(
+            code: 415,
+            message: L10n.text(
+                "Этот поток нельзя экспортировать в аудиофайл."
+            )
+        )
+    }
+
+    private func isHLSFile(at url: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else {
+            return false
+        }
+        defer { try? handle.close() }
+        let prefix = (try? handle.read(upToCount: 16)) ?? Data()
+        return String(data: prefix, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .hasPrefix("#EXTM3U") == true
+    }
+
+    private func safeFilename(_ value: String) -> String {
+        let invalid = CharacterSet(
+            charactersIn: "/\\:*?\"<>|"
+        )
+        .union(.controlCharacters)
+        .union(.newlines)
+
+        let collapsed = value
+            .components(separatedBy: invalid)
+            .joined(separator: " ")
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let shortened = String(collapsed.prefix(90))
+        return shortened.isEmpty ? "Museeks" : shortened
+    }
+}

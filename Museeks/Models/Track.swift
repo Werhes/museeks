@@ -1,133 +1,249 @@
 import Foundation
 
-struct Track: Codable, Identifiable, Hashable, Sendable {
-    let audioID: Int
+struct Track: Codable, Hashable, Identifiable, Sendable {
+    let trackID: Int
     let ownerID: Int
     let title: String
     let artist: String
+    let albumTitle: String?
     let duration: TimeInterval
     let streamURL: URL?
     let artworkURL: URL?
-    let albumTitle: String?
-    let lyricsID: Int?
     let accessKey: String?
-    let isExplicit: Bool
+    let lyricsID: Int?
+    let albumReference: AlbumReference?
 
-    var id: String { "\(ownerID)_\(audioID)" }
-    var apiIdentifier: String { accessKey.map { "\(id)_\($0)" } ?? id }
-    var metadataOnly: Track {
-        Track(
-            audioID: audioID,
-            ownerID: ownerID,
-            title: title,
-            artist: artist,
-            duration: duration,
-            streamURL: nil,
-            artworkURL: artworkURL,
-            albumTitle: albumTitle,
-            lyricsID: lyricsID,
-            accessKey: accessKey,
-            isExplicit: isExplicit
-        )
+    var id: String { "\(ownerID)_\(trackID)" }
+
+    init(
+        trackID: Int,
+        ownerID: Int,
+        title: String,
+        artist: String,
+        albumTitle: String? = nil,
+        duration: TimeInterval,
+        streamURL: URL?,
+        artworkURL: URL?,
+        accessKey: String? = nil,
+        lyricsID: Int? = nil,
+        albumReference: AlbumReference? = nil
+    ) {
+        self.trackID = trackID
+        self.ownerID = ownerID
+        self.title = title
+        self.artist = artist
+        self.albumTitle = albumTitle
+        self.duration = duration
+        self.streamURL = streamURL
+        self.artworkURL = artworkURL
+        self.accessKey = accessKey
+        self.lyricsID = lyricsID
+        self.albumReference = albumReference
     }
 
     enum CodingKeys: String, CodingKey {
-        case audioID = "id"
+        case id
         case ownerID = "owner_id"
         case title
         case artist
-        case duration
-        case streamURL = "url"
-        case artworkURL = "artwork_url"
         case albumTitle = "album_title"
-        case lyricsID = "lyrics_id"
-        case accessKey = "access_key"
-        case isExplicit = "is_explicit"
+        case duration
+        case url
         case album
+        case albumID = "album_id"
+        case accessKey = "access_key"
+        case lyricsID = "lyrics_id"
     }
 
-    private enum AlbumKeys: String, CodingKey { case title, thumb }
-    private enum ThumbKeys: String, CodingKey {
-        case photo1200 = "photo_1200"
+    enum AlbumKeys: String, CodingKey {
+        case id
+        case ownerID = "owner_id"
+        case accessKey = "access_key"
+        case thumb, photo
+        case title
+    }
+
+    enum ThumbKeys: String, CodingKey {
         case photo600 = "photo_600"
         case photo300 = "photo_300"
         case photo270 = "photo_270"
     }
 
     init(from decoder: Decoder) throws {
-        let box = try decoder.container(keyedBy: CodingKeys.self)
-        audioID = try box.decode(Int.self, forKey: .audioID)
-        ownerID = try box.decode(Int.self, forKey: .ownerID)
-        title = try box.decodeIfPresent(String.self, forKey: .title) ?? "Без названия"
-        artist = try box.decodeIfPresent(String.self, forKey: .artist) ?? "Неизвестный исполнитель"
-        duration = TimeInterval(try box.decodeIfPresent(Int.self, forKey: .duration) ?? 0)
-        streamURL = Self.decodeURL(box, key: .streamURL)
-        lyricsID = try box.decodeIfPresent(Int.self, forKey: .lyricsID)
-        accessKey = try box.decodeIfPresent(String.self, forKey: .accessKey)
-        isExplicit = (try? box.decode(Bool.self, forKey: .isExplicit))
-            ?? ((try? box.decode(Int.self, forKey: .isExplicit)) == 1)
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        trackID = try container.decode(Int.self, forKey: .id)
+        ownerID = try container.decode(Int.self, forKey: .ownerID)
+        title = try container.decode(String.self, forKey: .title)
+        artist = try container.decode(String.self, forKey: .artist)
+        albumTitle = try container.decodeIfPresent(
+            String.self,
+            forKey: .albumTitle
+        ) ?? (try? container.nestedContainer(
+            keyedBy: AlbumKeys.self,
+            forKey: .album
+        ).decodeIfPresent(String.self, forKey: .title)) ?? nil
+        duration = TimeInterval(
+            try container.decodeIfPresent(Int.self, forKey: .duration) ?? 0
+        )
+        let stream = try container.decodeIfPresent(String.self, forKey: .url)
+        streamURL = stream.flatMap(URL.secureRemoteURL)
+        accessKey = try container.decodeIfPresent(String.self, forKey: .accessKey)
+        lyricsID = try container.decodeIfPresent(Int.self, forKey: .lyricsID)
 
-        var nestedAlbumTitle: String?
-        var nestedArtwork: URL?
-        if let album = try? box.nestedContainer(keyedBy: AlbumKeys.self, forKey: .album) {
-            nestedAlbumTitle = try album.decodeIfPresent(String.self, forKey: .title)
-            if let thumb = try? album.nestedContainer(keyedBy: ThumbKeys.self, forKey: .thumb) {
-                let raw = try thumb.decodeIfPresent(String.self, forKey: .photo1200)
-                    ?? thumb.decodeIfPresent(String.self, forKey: .photo600)
-                    ?? thumb.decodeIfPresent(String.self, forKey: .photo300)
-                    ?? thumb.decodeIfPresent(String.self, forKey: .photo270)
-                nestedArtwork = raw.flatMap(URL.init(string:))
+        if let album = try? container.nestedContainer(
+            keyedBy: AlbumKeys.self,
+            forKey: .album
+        ) {
+            let thumb = try? album.nestedContainer(
+                keyedBy: ThumbKeys.self,
+                forKey: .thumb
+            )
+            let photo = try? album.nestedContainer(
+                keyedBy: ThumbKeys.self,
+                forKey: .photo
+            )
+            var raw: String?
+            if let thumb {
+                raw = try thumb.decodeIfPresent(
+                    String.self,
+                    forKey: .photo600
+                )
+                if raw == nil {
+                    raw = try thumb.decodeIfPresent(
+                        String.self,
+                        forKey: .photo300
+                    )
+                }
+                if raw == nil {
+                    raw = try thumb.decodeIfPresent(
+                        String.self,
+                        forKey: .photo270
+                    )
+                }
             }
+            if raw == nil, let photo {
+                raw = try photo.decodeIfPresent(
+                    String.self,
+                    forKey: .photo600
+                )
+                if raw == nil {
+                    raw = try photo.decodeIfPresent(
+                        String.self,
+                        forKey: .photo300
+                    )
+                }
+                if raw == nil {
+                    raw = try photo.decodeIfPresent(
+                        String.self,
+                        forKey: .photo270
+                    )
+                }
+            }
+            artworkURL = raw.flatMap(URL.secureRemoteURL)
+        } else {
+            artworkURL = nil
         }
-        albumTitle = try box.decodeIfPresent(String.self, forKey: .albumTitle) ?? nestedAlbumTitle
-        artworkURL = Self.decodeURL(box, key: .artworkURL) ?? nestedArtwork
-    }
-
-    init(
-        audioID: Int,
-        ownerID: Int,
-        title: String,
-        artist: String,
-        duration: TimeInterval,
-        streamURL: URL?,
-        artworkURL: URL?,
-        albumTitle: String? = nil,
-        lyricsID: Int? = nil,
-        accessKey: String? = nil,
-        isExplicit: Bool = false
-    ) {
-        self.audioID = audioID
-        self.ownerID = ownerID
-        self.title = title
-        self.artist = artist
-        self.duration = duration
-        self.streamURL = streamURL
-        self.artworkURL = artworkURL
-        self.albumTitle = albumTitle
-        self.lyricsID = lyricsID
-        self.accessKey = accessKey
-        self.isExplicit = isExplicit
+        let nestedAlbum = try? container.nestedContainer(
+            keyedBy: AlbumKeys.self,
+            forKey: .album
+        )
+        let nestedAlbumID = try nestedAlbum?.decodeIfPresent(
+            Int.self,
+            forKey: .id
+        )
+        let nestedOwnerID = try nestedAlbum?.decodeIfPresent(
+            Int.self,
+            forKey: .ownerID
+        )
+        if let albumID = nestedAlbumID,
+           let albumOwnerID = nestedOwnerID {
+            albumReference = AlbumReference(
+                albumID: albumID,
+                ownerID: albumOwnerID,
+                accessKey: try nestedAlbum?.decodeIfPresent(
+                    String.self,
+                    forKey: .accessKey
+                )
+            )
+        } else {
+            // A top-level album_id or nested id without owner_id is not a
+            // complete playlist locator. The audio owner can differ from the
+            // album owner, so CatalogView must resolve it by title instead.
+            albumReference = nil
+        }
     }
 
     func encode(to encoder: Encoder) throws {
-        var box = encoder.container(keyedBy: CodingKeys.self)
-        try box.encode(audioID, forKey: .audioID)
-        try box.encode(ownerID, forKey: .ownerID)
-        try box.encode(title, forKey: .title)
-        try box.encode(artist, forKey: .artist)
-        try box.encode(Int(duration), forKey: .duration)
-        try box.encodeIfPresent(streamURL, forKey: .streamURL)
-        try box.encodeIfPresent(artworkURL, forKey: .artworkURL)
-        try box.encodeIfPresent(albumTitle, forKey: .albumTitle)
-        try box.encodeIfPresent(lyricsID, forKey: .lyricsID)
-        try box.encodeIfPresent(accessKey, forKey: .accessKey)
-        try box.encode(isExplicit, forKey: .isExplicit)
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(trackID, forKey: .id)
+        try container.encode(ownerID, forKey: .ownerID)
+        try container.encode(title, forKey: .title)
+        try container.encode(artist, forKey: .artist)
+        try container.encodeIfPresent(albumTitle, forKey: .albumTitle)
+        try container.encode(Int(duration), forKey: .duration)
+        try container.encodeIfPresent(streamURL?.absoluteString, forKey: .url)
+        try container.encodeIfPresent(accessKey, forKey: .accessKey)
+        try container.encodeIfPresent(lyricsID, forKey: .lyricsID)
+        try container.encodeIfPresent(
+            albumReference?.albumID,
+            forKey: .albumID
+        )
+        if albumTitle != nil || albumReference != nil || artworkURL != nil {
+            var album = container.nestedContainer(
+                keyedBy: AlbumKeys.self,
+                forKey: .album
+            )
+            try album.encodeIfPresent(albumTitle, forKey: .title)
+            try album.encodeIfPresent(albumReference?.albumID, forKey: .id)
+            try album.encodeIfPresent(
+                albumReference?.ownerID,
+                forKey: .ownerID
+            )
+            try album.encodeIfPresent(
+                albumReference?.accessKey,
+                forKey: .accessKey
+            )
+            if let artworkURL {
+                var thumb = album.nestedContainer(
+                    keyedBy: ThumbKeys.self,
+                    forKey: .thumb
+                )
+                try thumb.encode(
+                    artworkURL.absoluteString,
+                    forKey: .photo600
+                )
+            }
+        }
     }
 
-    private static func decodeURL(
-        _ box: KeyedDecodingContainer<CodingKeys>,
-        key: CodingKeys
-    ) -> URL? {
-        try? box.decode(URL.self, forKey: key)
+    func resolvingStreamURL(userID: Int?) -> Track {
+        Track(
+            trackID: trackID,
+            ownerID: ownerID,
+            title: title,
+            artist: artist,
+            albumTitle: albumTitle,
+            duration: duration,
+            streamURL: VKAudioURLResolver.resolve(
+                streamURL,
+                userID: userID
+            ),
+            artworkURL: artworkURL,
+            accessKey: accessKey,
+            lyricsID: lyricsID,
+            albumReference: albumReference
+        )
+    }
+}
+
+extension URL {
+    static func secureRemoteURL(_ rawValue: String) -> URL? {
+        guard !rawValue.isEmpty,
+              let url = URL(string: rawValue),
+              url.scheme?.lowercased() == "https",
+              url.host != nil else {
+            return nil
+        }
+        return url
     }
 }

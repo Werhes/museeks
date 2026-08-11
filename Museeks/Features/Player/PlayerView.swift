@@ -1,61 +1,117 @@
-import AVKit
 import SwiftUI
+import UIKit
+import AVKit
 
 struct PlayerView: View {
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var environment: AppEnvironment
-    @EnvironmentObject private var player: PlayerController
-    @EnvironmentObject private var library: MusicLibraryStore
-    @State private var showsQueue = false
-    @State private var showsLyrics = false
+    @EnvironmentObject private var sessionStore: SessionStore
+    @EnvironmentObject private var player: AudioPlayer
+    @EnvironmentObject private var progress: PlaybackProgressModel
+    @EnvironmentObject private var settings: AppSettings
+    @EnvironmentObject private var libraryStore: MusicLibraryStore
+    @EnvironmentObject private var offlineStore: OfflineTrackStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @GestureState private var artworkDrag: CGSize = .zero
+    @State private var presentedSheet: PlayerSheet?
+    @State private var deferredPlayerAction: DeferredPlayerAction?
+    @State private var isInLibrary = false
+    @State private var isUpdatingLibrary = false
+    @State private var scrubPosition: TimeInterval?
+    @State private var showCopiedToast = false
+    @State private var sharingTrack: Track?
 
     var body: some View {
-        ZStack {
-            playerBackground
-            GeometryReader { proxy in
-                let artSize = min(proxy.size.width - 52, 390)
-                VStack(spacing: 0) {
-                    topBar
-                    Spacer(minLength: 12)
-                    if let track = player.currentTrack {
-                        ArtworkView(url: track.artworkURL, size: artSize, cornerRadius: 32)
-                            .shadow(color: .black.opacity(0.35), radius: 30, y: 17)
-                            .accessibilityLabel("Обложка \(track.title)")
-                    }
-                    Spacer(minLength: 22)
-                    metadata
-                    timeline
-                    controls
-                    bottomActions
-                    Spacer(minLength: 12)
+        GeometryReader { proxy in
+            ZStack {
+                artworkBackground
+
+                if let track = player.currentTrack {
+                    playerContent(
+                        track,
+                        size: proxy.size,
+                        safeInsets: proxy.safeAreaInsets
+                    )
+                } else {
+                    EmptyStateView(
+                        title: "Плеер",
+                        systemImage: "play.circle",
+                        description: "Выберите трек в медиатеке или миксе."
+                    )
+                    .foregroundStyle(playerForeground)
+                    .padding()
                 }
-                .padding(.horizontal, 24)
+            }
+            .frame(
+                width: proxy.size.width,
+                height: proxy.size.height
+            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .simultaneousGesture(fullScreenDismissGesture)
+        .background(playerBackground.ignoresSafeArea())
+        .preferredColorScheme(settings.theme.colorScheme)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+        .sheet(
+            item: $presentedSheet,
+            onDismiss: handleSheetDismissal
+        ) { sheet in
+            presentedSheetContent(sheet)
+        }
+        .trackShareSheet(track: $sharingTrack)
+        .onChange(of: player.currentTrack?.id) { _ in
+            deferredPlayerAction = nil
+            scrubPosition = nil
+            updateLibraryState()
+            isUpdatingLibrary = false
+            if isActionSheetPresented {
+                presentedSheet = nil
             }
         }
-        .preferredColorScheme(.dark)
-        .sheet(isPresented: $showsQueue) { QueueView() }
-        .sheet(isPresented: $showsLyrics) { LyricsView() }
+        .task(id: player.currentTrack?.id) {
+            updateLibraryState()
+        }
+        .onChange(of: libraryStore.signatures) { _ in
+            updateLibraryState()
+        }
+        .overlay(alignment: .bottom) {
+            if showCopiedToast {
+                Text(L10n.text("Ссылка скопирована"))
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .adaptiveGlass(in: Capsule())
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(.bottom, 40)
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: showCopiedToast)
     }
 
-    private var playerBackground: some View {
+    private var artworkBackground: some View {
         ZStack {
-            Color.black
-            AsyncImage(url: player.currentTrack?.artworkURL) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-                    .blur(radius: 65)
-                    .saturation(1.25)
-                    .opacity(0.53)
-            } placeholder: {
-                LinearGradient(
-                    colors: [MuseeksPalette.accent.opacity(0.55), MuseeksPalette.deep],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+            playerBackground
+            if let artworkURL = player.currentTrack?.artworkURL {
+                CachedRemoteImage(
+                    url: artworkURL,
+                    maxPixelSize: 1_024
+                ) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .scaleEffect(1.28)
+                        .blur(radius: 78)
+                        .saturation(1.12)
+                        .opacity(settings.theme == .light ? 0.18 : 1)
+                } placeholder: {
+                    Color.clear
+                }
+                .id(player.currentTrack?.id)
             }
+            playerBackground.opacity(settings.theme == .light ? 0.72 : 0.56)
             LinearGradient(
-                colors: [.black.opacity(0.08), .black.opacity(0.62)],
+                colors: backgroundGradient,
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -63,174 +119,1871 @@ struct PlayerView: View {
         .ignoresSafeArea()
     }
 
-    private var topBar: some View {
-        MuseeksGlassContainer(spacing: 12) {
-            HStack {
-                GlassIconButton(systemImage: "chevron.down", accessibilityLabel: "Закрыть") {
-                    dismiss()
+    @ViewBuilder
+    private func playerContent(
+        _ track: Track,
+        size: CGSize,
+        safeInsets: EdgeInsets
+    ) -> some View {
+        let metrics = PlayerLayoutMetrics.resolve(
+            containerSize: size,
+            safeBottom: safeInsets.bottom,
+            safeLeading: safeInsets.leading,
+            safeTrailing: safeInsets.trailing,
+            usesAccessibilityText: dynamicTypeSize.isAccessibilitySize,
+            hasAlbum: track.albumTitle?.isEmpty == false
+        )
+
+        Group {
+            if metrics.requiresAccessibilityScrolling(
+                containerHeight: size.height
+            ) {
+                ScrollView(.vertical) {
+                    landscapePlayerContent(track, metrics: metrics)
+                        .frame(minHeight: metrics.minimumContentHeight)
                 }
-                Spacer()
+                .scrollIndicators(.hidden)
+            } else if metrics.mode == .landscape {
+                landscapePlayerContent(track, metrics: metrics)
+            } else {
+                portraitPlayerContent(track, metrics: metrics)
+            }
+        }
+        .frame(
+            width: metrics.contentWidth,
+            height: size.height
+        )
+        .padding(.leading, metrics.leadingPadding)
+        .padding(.trailing, metrics.trailingPadding)
+        .foregroundStyle(playerForeground)
+    }
+
+    private func portraitPlayerContent(
+        _ track: Track,
+        metrics: PlayerLayoutMetrics
+    ) -> some View {
+        VStack(spacing: 0) {
+            playerHeader(track)
+                .frame(height: metrics.headerHeight)
+                .padding(.top, metrics.headerTopPadding)
+
+            Spacer(minLength: metrics.artworkTopSpacing)
+
+            playerArtwork(track, size: metrics.artworkSize)
+
+            Spacer(minLength: metrics.metadataTopSpacing)
+
+            trackMetadata(track)
+
+            Spacer(minLength: metrics.progressTopSpacing)
+
+            progressControls
+
+            Spacer(minLength: metrics.controlsTopSpacing)
+
+            primaryControls
+                .frame(height: metrics.primaryControlsHeight)
+
+            Spacer(minLength: metrics.quickActionsTopSpacing)
+
+            quickActions(track)
+                .frame(height: metrics.quickActionsHeight)
+
+            Color.clear
+                .frame(height: metrics.bottomPadding)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func landscapePlayerContent(
+        _ track: Track,
+        metrics: PlayerLayoutMetrics
+    ) -> some View {
+        VStack(spacing: 0) {
+            playerHeader(track)
+                .frame(height: metrics.headerHeight)
+                .padding(.top, metrics.headerTopPadding)
+
+            Spacer(minLength: metrics.artworkTopSpacing)
+
+            HStack(spacing: metrics.landscapeColumnSpacing) {
+                playerArtwork(track, size: metrics.artworkSize)
+
+                VStack(spacing: 0) {
+                    trackMetadata(track)
+
+                    Spacer(minLength: metrics.progressTopSpacing)
+
+                    progressControls
+
+                    Spacer(minLength: metrics.controlsTopSpacing)
+
+                    primaryControls
+                        .frame(height: metrics.primaryControlsHeight)
+                }
+                .frame(maxHeight: .infinity)
+            }
+            .frame(maxHeight: .infinity)
+
+            Spacer(minLength: metrics.quickActionsTopSpacing)
+
+            quickActions(track)
+                .frame(height: metrics.quickActionsHeight)
+
+            Color.clear
+                .frame(height: metrics.bottomPadding)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func playerHeader(_ track: Track) -> some View {
+        AdaptiveGlassContainer(spacing: 8) {
+            ZStack {
                 VStack(spacing: 2) {
                     Text("СЕЙЧАС ИГРАЕТ")
-                        .font(.caption2.bold())
-                        .tracking(0.8)
-                        .foregroundStyle(.secondary)
-                    Text(player.queueTitle)
-                        .font(.caption.weight(.semibold))
+                        .font(.caption2.weight(.bold))
+                        .tracking(1.1)
+                        .foregroundStyle(playerSecondary)
+                    Text(player.queueContextTitle.uppercased())
+                        .font(.system(size: 10, weight: .medium))
                         .lineLimit(1)
+                        .truncationMode(.tail)
+                        .foregroundStyle(playerSecondary)
                 }
-                Spacer()
-                GlassIconButton(systemImage: "list.bullet", accessibilityLabel: "Очередь") {
-                    showsQueue = true
+                .accessibilityElement(children: .combine)
+                .accessibilitySortPriority(1)
+
+                HStack {
+                    playerGlassIconButton(
+                        systemImage: "chevron.down",
+                        font: .system(size: 15, weight: .bold),
+                        accessibilityLabel: "Закрыть плеер",
+                        accessibilitySortPriority: 4,
+                        action: closePlayer
+                    )
+
+                    Spacer()
+
+                    HStack(spacing: 8) {
+                        AirPlayRoutePicker(
+                            tintColor: UIColor(playerForeground)
+                        )
+                            .frame(width: 44, height: 44)
+                            .adaptiveGlass(
+                                in: Circle(),
+                                interactive: true
+                            )
+                            .accessibilityLabel(
+                                L10n.text(
+                                    "Выбрать устройство воспроизведения"
+                                )
+                            )
+                            .accessibilitySortPriority(3)
+                        actionMenuButton(track)
+                            .accessibilitySortPriority(2)
+                    }
                 }
             }
         }
-        .padding(.top, 8)
     }
 
-    private var metadata: some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(player.currentTrack?.title ?? "")
-                    .font(.title2.bold())
-                    .lineLimit(1)
-                Text(player.currentTrack?.artist ?? "")
-                    .font(.body)
-                    .foregroundStyle(.white.opacity(0.7))
-                    .lineLimit(1)
+    private func playerArtwork(
+        _ track: Track,
+        size: CGFloat
+    ) -> some View {
+        let layout = PlayerArtworkCarouselPolicy.layout(for: size)
+        let neighbors = PlayerArtworkCarouselPolicy.neighborIndices(
+            queueCount: player.queue.count,
+            currentIndex: player.currentIndex,
+            repeatMode: player.repeatMode
+        )
+
+        return ZStack {
+            ZStack {
+                if let previousIndex = neighbors.previous,
+                   player.queue.indices.contains(previousIndex) {
+                    carouselNeighbor(
+                        player.queue[previousIndex],
+                        size: layout.neighborSize,
+                        role: "previous"
+                    )
+                    .offset(x: -layout.neighborOffset)
+                }
+                if let nextIndex = neighbors.next,
+                   player.queue.indices.contains(nextIndex) {
+                    carouselNeighbor(
+                        player.queue[nextIndex],
+                        size: layout.neighborSize,
+                        role: "next"
+                    )
+                    .offset(x: layout.neighborOffset)
+                }
             }
-            Spacer()
-            if player.isBuffering { ProgressView().tint(.white) }
-            if let track = player.currentTrack {
+            .frame(width: size, height: size)
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: PremiumLayout.artworkRadius(for: size),
+                    style: .continuous
+                )
+            )
+
+            AsyncArtwork(url: track.artworkURL, size: layout.centerSize)
+                .id(track.id)
+                .overlay {
+                    RoundedRectangle(
+                        cornerRadius: PremiumLayout.artworkRadius(
+                            for: layout.centerSize
+                        ),
+                        style: .continuous
+                    )
+                    .stroke(playerForeground.opacity(0.08), lineWidth: 0.7)
+                }
+                .shadow(color: .black.opacity(0.42), radius: 26, y: 14)
+                .offset(
+                    x: reduceMotion ? 0 : artworkDrag.width * 0.16,
+                    y: reduceMotion ? 0 : artworkDrag.height * 0.08
+                )
+                .rotationEffect(
+                    .degrees(reduceMotion ? 0 : artworkDrag.width / 65)
+                )
+        }
+            .frame(width: size, height: size)
+            .contentShape(Rectangle())
+            .offset(
+                x: reduceMotion ? 0 : artworkDrag.width * 0.03
+            )
+            .animation(
+                reduceMotion
+                    ? nil
+                    : .spring(response: 0.3, dampingFraction: 0.82),
+                value: artworkDrag == .zero
+            )
+            .gesture(artworkGesture)
+            .accessibilityLabel(
+                L10n.format(
+                    "Обложка: %@ — %@",
+                    track.title,
+                    track.artist
+                )
+            )
+            .accessibilityHint(
+                L10n.text(
+                    "Свайп в стороны меняет трек, вверх открывает очередь, "
+                        + "вниз закрывает плеер"
+                )
+            )
+            .accessibilityAction(
+                named: L10n.text("Следующий трек")
+            ) {
+                Haptics.trackChange()
+                player.next()
+            }
+            .accessibilityAction(
+                named: L10n.text("Предыдущий трек")
+            ) {
+                Haptics.trackChange()
+                player.previous()
+            }
+            .accessibilityAction(
+                named: L10n.text("Очередь")
+            ) {
+                present(.queue)
+            }
+            .accessibilityAction(
+                named: L10n.text("Закрыть плеер")
+            ) {
+                closePlayer()
+            }
+    }
+
+    private func carouselNeighbor(
+        _ track: Track,
+        size: CGFloat,
+        role: String
+    ) -> some View {
+        AsyncArtwork(url: track.artworkURL, size: size)
+            .id("\(role)-\(track.id)")
+            .saturation(0.82)
+            .opacity(0.58)
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: PremiumLayout.artworkRadius(for: size),
+                    style: .continuous
+                )
+                .stroke(playerForeground.opacity(0.06), lineWidth: 0.6)
+            }
+            .accessibilityHidden(true)
+    }
+
+    private func trackMetadata(_ track: Track) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(track.title)
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(playerForeground)
+                    .lineLimit(1)
                 Button {
-                    Task { await library.toggle(track, environment: environment) }
+                    present(.artist(track.artist))
                 } label: {
-                    Image(systemName: library.contains(track) ? "heart.fill" : "heart")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(library.contains(track) ? MuseeksPalette.pink : .white)
-                        .frame(width: 42, height: 42)
+                    Text(track.artist)
+                        .font(.subheadline)
+                        .lineLimit(1)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(
-                    library.contains(track) ? "Убрать из моей музыки" : "Добавить в мою музыку"
+                .foregroundStyle(playerSecondary)
+                if let album = track.albumTitle, !album.isEmpty {
+                    Text(album)
+                        .font(.caption2)
+                        .foregroundStyle(playerSecondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 10)
+
+            playerGlassIconButton(
+                systemImage: isInLibrary ? "heart.fill" : "heart",
+                font: .system(size: 19, weight: .semibold),
+                tint: isInLibrary
+                    ? playerForeground
+                    : playerForeground.opacity(0.72),
+                accessibilityLabel: isInLibrary
+                    ? "Удалить из медиатеки"
+                    : "Добавить в медиатеку",
+                accessibilityValue: isInLibrary
+                    ? "Трек добавлен в медиатеку"
+                    : "Трек не добавлен в медиатеку",
+                disabled: isUpdatingLibrary
+            ) {
+                toggleLibrary(track)
+            }
+        }
+    }
+
+    private var progressControls: some View {
+        VStack(spacing: 3) {
+            CompactPlayerSlider(
+                value: Binding(
+                    get: { displayedElapsedTime },
+                    set: { scrubPosition = $0 }
+                ),
+                range: 0...max(player.duration, 1),
+                tintColor: UIColor(playerForeground),
+                onEditingBegan: {
+                    scrubPosition = progress.elapsedTime
+                },
+                onCommit: commitScrubbing
+            )
+            .frame(height: 20)
+            .accessibilityLabel(
+                L10n.text("Позиция воспроизведения")
+            )
+            .accessibilityValue(
+                "\(displayedElapsedTime.formattedDuration) / "
+                    + player.duration.formattedDuration
+            )
+
+            HStack {
+                Text(displayedElapsedTime.formattedDuration)
+                Spacer()
+                Text("-\(remainingTime.formattedDuration)")
+            }
+            .font(.system(size: 11, weight: .medium).monospacedDigit())
+            .foregroundStyle(playerSecondary)
+        }
+    }
+
+    private func actionMenuButton(_ track: Track) -> some View {
+        playerGlassIconButton(
+            systemImage: "ellipsis",
+            font: .headline,
+            accessibilityLabel: "Действия с треком"
+        ) {
+            present(.actions(track))
+        }
+    }
+
+    private var primaryControls: some View {
+        AdaptiveGlassContainer(spacing: 18) {
+            HStack(spacing: 0) {
+                secondaryButton(
+                    "shuffle",
+                    active: player.shuffleEnabled,
+                    label: "Перемешать",
+                    accessibilityValue: player.shuffleEnabled
+                        ? "Перемешивание включено"
+                        : "Перемешивание выключено"
+                ) {
+                    Haptics.selection()
+                    player.toggleShuffle()
+                }
+                Spacer()
+                transportSkipButton(
+                    systemImage: "backward.fill",
+                    accessibilityLabel: "Предыдущий трек"
+                ) {
+                    Haptics.trackChange()
+                    player.previous()
+                }
+                Spacer()
+                playPauseButton
+                Spacer()
+                transportSkipButton(
+                    systemImage: "forward.fill",
+                    accessibilityLabel: "Следующий трек"
+                ) {
+                    Haptics.trackChange()
+                    player.next()
+                }
+                Spacer()
+                secondaryButton(
+                    player.repeatMode.systemImage,
+                    active: player.repeatMode != .off,
+                    label: "Повтор",
+                    accessibilityValue: repeatAccessibilityValue
+                ) {
+                    Haptics.selection()
+                    player.cycleRepeatMode()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var playPauseButton: some View {
+        if #available(iOS 26.0, *) {
+            Button {
+                Haptics.selection()
+                player.playPause()
+            } label: {
+                playPauseLabel
+            }
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.circle)
+            .clipShape(Circle())
+            .tint(playerForeground)
+            .foregroundStyle(playerBackground)
+            .controlSize(.large)
+            .accessibilityLabel(playPauseAccessibilityLabel)
+        } else {
+            Button {
+                Haptics.selection()
+                player.playPause()
+            } label: {
+                playPauseLabel
+                    .background(playerForeground, in: Circle())
+                    .foregroundStyle(playerBackground)
+                    .shadow(color: .black.opacity(0.2), radius: 12, y: 6)
+            }
+            .buttonStyle(PlayerControlStyle())
+            .accessibilityLabel(playPauseAccessibilityLabel)
+        }
+    }
+
+    private var playPauseLabel: some View {
+        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+            .font(.system(size: 29, weight: .bold))
+            .frame(width: 64, height: 64)
+            .contentShape(Circle())
+    }
+
+    private var playPauseAccessibilityLabel: String {
+        L10n.text(
+            player.isPlaying
+                ? "Приостановить"
+                : "Продолжить воспроизведение"
+        )
+    }
+
+    private func quickActions(_ track: Track) -> some View {
+        AdaptiveGlassContainer(spacing: 14) {
+            HStack(spacing: 0) {
+                quickAction("quote.bubble", title: "Текст") {
+                    present(.lyrics(track))
+                }
+                quickAction("list.bullet", title: "Очередь") {
+                    present(.queue)
+                }
+                quickAction(
+                    "rectangle.stack.badge.plus",
+                    title: "Плейлист"
+                ) {
+                    present(.playlists(track))
+                }
+                quickAction(
+                    "square.and.arrow.up",
+                    title: "Поделиться файлом"
+                ) {
+                    startShare(track)
+                }
+            }
+        }
+    }
+
+    private func quickAction(
+        _ image: String,
+        title: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                quickActionGlyph(image)
+                Text(L10n.text(title))
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(playerForeground.opacity(0.72))
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 61)
+        }
+        .buttonStyle(PlayerControlStyle())
+        .accessibilityLabel(L10n.text(title))
+    }
+
+    @ViewBuilder
+    private func quickActionGlyph(_ image: String) -> some View {
+        if #available(iOS 26.0, *) {
+            Image(systemName: image)
+                .font(.system(size: 16, weight: .semibold))
+                .frame(width: 44, height: 44)
+                .glassEffect(.regular.interactive(), in: Circle())
+        } else {
+            Image(systemName: image)
+                .font(.system(size: 16, weight: .semibold))
+                .frame(width: 44, height: 44)
+                .adaptiveGlass(in: Circle(), interactive: true)
+        }
+    }
+
+    @ViewBuilder
+    private func transportSkipButton(
+        systemImage: String,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        if #available(iOS 26.0, *) {
+            Button(action: action) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 22, weight: .semibold))
+                    .frame(width: 52, height: 52)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .tint(playerForeground)
+            .accessibilityLabel(L10n.text(accessibilityLabel))
+        } else {
+            Button(action: action) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 25, weight: .semibold))
+                    .frame(width: 48, height: 52)
+            }
+            .buttonStyle(PlayerControlStyle())
+            .accessibilityLabel(L10n.text(accessibilityLabel))
+        }
+    }
+
+    @ViewBuilder
+    private func playerGlassIconButton(
+        systemImage: String,
+        font: Font = .headline,
+        tint: Color? = nil,
+        accessibilityLabel: String,
+        accessibilityValue: String? = nil,
+        accessibilitySortPriority: Double? = nil,
+        disabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        let resolvedTint = tint ?? playerForeground
+        let button = Group {
+            if #available(iOS 26.0, *) {
+                Button(action: action) {
+                    Image(systemName: systemImage)
+                        .font(font)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .tint(resolvedTint)
+                .disabled(disabled)
+            } else {
+                Button(action: action) {
+                    Image(systemName: systemImage)
+                        .font(font)
+                        .foregroundStyle(resolvedTint)
+                        .frame(width: 44, height: 44)
+                        .adaptiveGlass(in: Circle(), interactive: true)
+                }
+                .buttonStyle(PlayerControlStyle())
+                .disabled(disabled)
+            }
+        }
+        .accessibilityLabel(L10n.text(accessibilityLabel))
+
+        if let accessibilityValue {
+            button
+                .accessibilityValue(L10n.text(accessibilityValue))
+                .accessibilitySortPriority(accessibilitySortPriority ?? 0)
+        } else if let accessibilitySortPriority {
+            button.accessibilitySortPriority(accessibilitySortPriority)
+        } else {
+            button
+        }
+    }
+
+    @ViewBuilder
+    private func secondaryButton(
+        _ image: String,
+        active: Bool,
+        label: String,
+        accessibilityValue: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        if #available(iOS 26.0, *) {
+            Button(action: action) {
+                Image(systemName: image)
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .tint(
+                active
+                    ? playerForeground
+                    : playerForeground.opacity(0.55)
+            )
+            .opacity(active ? 1 : 0.85)
+            .accessibilityLabel(L10n.text(label))
+            .accessibilityValue(L10n.text(accessibilityValue))
+        } else {
+            Button(action: action) {
+                Image(systemName: image)
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(
+                        active
+                            ? playerForeground
+                            : playerForeground.opacity(0.58)
+                    )
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.text(label))
+            .accessibilityValue(L10n.text(accessibilityValue))
+        }
+    }
+
+    private var repeatAccessibilityValue: String {
+        switch player.repeatMode {
+        case .off:
+            return "Повтор выключен"
+        case .all:
+            return "Повтор всей очереди"
+        case .one:
+            return "Повтор одного трека"
+        }
+    }
+
+    private var remainingTime: TimeInterval {
+        max(player.duration - displayedElapsedTime, 0)
+    }
+
+    private var playerForeground: Color {
+        settings.theme == .light ? .black : .white
+    }
+
+    private var playerSecondary: Color {
+        playerForeground.opacity(settings.theme == .light ? 0.62 : 0.56)
+    }
+
+    private var playerBackground: Color {
+        settings.theme == .light ? .white : .black
+    }
+
+    private var backgroundGradient: [Color] {
+        if settings.theme == .light {
+            return [
+                .white.opacity(0.28),
+                .white.opacity(0.72),
+                .white.opacity(0.98),
+            ]
+        }
+        return [
+            .black.opacity(0.18),
+            .black.opacity(0.42),
+            .black.opacity(0.92),
+        ]
+    }
+
+    private var displayedElapsedTime: TimeInterval {
+        scrubPosition ?? progress.elapsedTime
+    }
+
+    private func commitScrubbing(_ position: TimeInterval) {
+        player.seek(to: position)
+        scrubPosition = nil
+    }
+
+    @ViewBuilder
+    private func presentedSheetContent(_ sheet: PlayerSheet) -> some View {
+        switch sheet {
+        case .queue:
+            QueueView()
+        case let .lyrics(track):
+            LyricsView(track: track)
+        case let .artist(artist):
+            ArtistView(artist: artist)
+        case let .playlists(track):
+            AddToPlaylistView(track: track)
+        case .settings:
+            NavigationStack { EqualizerSettingsView() }
+        case let .actions(track):
+            PlayerActionsSheet(
+                track: track,
+                isInLibrary: isInLibrary,
+                offlineState: offlineStore.state(for: track),
+                availability: PlayerActionAvailability(
+                    hasSession: sessionStore.accessToken != nil,
+                    isUpdatingLibrary: isUpdatingLibrary,
+                    showsOfflineControls: OfflineDownloadsFeature.showsControls
+                        && !environment.isShareSessionActive
+                ),
+                equalizerEnabled: $settings.equalizerEnabled,
+                spatialAudioEnabled: $settings.spatialAudioEnabled,
+                onDismiss: {
+                    presentedSheet = nil
+                },
+                onLibrary: {
+                    presentedSheet = nil
+                    toggleLibrary(track)
+                },
+                onArtist: {
+                    deferFromActionSheet(
+                        .sheet(.artist(track.artist))
+                    )
+                },
+                onPlaylist: {
+                    deferFromActionSheet(
+                        .sheet(.playlists(track))
+                    )
+                },
+                onShare: {
+                    deferFromActionSheet(.share(track))
+                },
+                onCopyLink: {
+                    presentedSheet = nil
+                    copyTrackLink(track)
+                },
+                onOffline: {
+                    presentedSheet = nil
+                    toggleOffline(track)
+                },
+                onSettings: {
+                    deferFromActionSheet(.sheet(.settings))
+                }
+            )
+        }
+    }
+
+    @discardableResult
+    private func present(_ sheet: PlayerSheet) -> Bool {
+        guard presentedSheet == nil else { return false }
+        presentedSheet = sheet
+        return true
+    }
+
+    private func deferFromActionSheet(_ action: DeferredPlayerAction) {
+        deferredPlayerAction = action
+        presentedSheet = nil
+    }
+
+    private func handleSheetDismissal() {
+        guard let action = deferredPlayerAction else { return }
+        deferredPlayerAction = nil
+
+        Task { @MainActor in
+            await Task.yield()
+            switch action {
+            case let .sheet(sheet):
+                _ = present(sheet)
+            case let .share(track):
+                startShare(track)
+            }
+        }
+    }
+
+    private var isActionSheetPresented: Bool {
+        guard let presentedSheet else { return false }
+        if case .actions = presentedSheet {
+            return true
+        }
+        return false
+    }
+
+    private var artworkGesture: some Gesture {
+        DragGesture(minimumDistance: 20)
+            .updating($artworkDrag) { value, state, _ in
+                state = value.translation
+            }
+            .onEnded { value in
+                let horizontal = value.translation.width
+                let vertical = value.translation.height
+                if abs(horizontal) > abs(vertical) {
+                    if horizontal < -58 {
+                        Haptics.trackChange()
+                        player.next()
+                    } else if horizontal > 58 {
+                        Haptics.trackChange()
+                        player.previous()
+                    }
+                } else if vertical < -60 {
+                    present(.queue)
+                } else if vertical > 72 {
+                    closePlayer()
+                }
+            }
+    }
+
+    private var fullScreenDismissGesture: some Gesture {
+        DragGesture(minimumDistance: 20)
+            .onEnded { value in
+                guard presentedSheet == nil,
+                      sharingTrack == nil,
+                      PlayerDismissGesturePolicy.shouldDismiss(
+                        translation: value.translation,
+                        predictedEndTranslation: value.predictedEndTranslation
+                      ) else {
+                    return
+                }
+                closePlayer()
+            }
+    }
+
+    private func closePlayer() {
+        presentedSheet = nil
+        deferredPlayerAction = nil
+        player.dismissPlayer()
+    }
+
+    private func startShare(_ track: Track) {
+        Haptics.open()
+        // Never present the share preparation sheet on top of another
+        // player sheet — nested modal presentations crash on device.
+        if presentedSheet != nil {
+            deferFromActionSheet(.share(track))
+            return
+        }
+        sharingTrack = track
+    }
+
+    private func copyTrackLink(_ track: Track) {
+        let url = "https://vk.com/audio\(track.ownerID)_\(track.trackID)"
+        UIPasteboard.general.string = url
+        Haptics.selection()
+        showCopiedToast = true
+
+        Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                return
+            }
+            showCopiedToast = false
+        }
+    }
+
+    private func toggleLibrary(_ track: Track) {
+        guard !isUpdatingLibrary,
+              sessionStore.accessToken != nil else {
+            return
+        }
+        let removing = isInLibrary
+        isUpdatingLibrary = true
+        Task {
+            defer { isUpdatingLibrary = false }
+            do {
+                if removing {
+                    let stored = libraryStore.storedTrack(for: track) ?? track
+                    try await environment.withAuthorizedToken { token in
+                        try await environment.musicService.removeFromLibrary(
+                            stored,
+                            accessToken: token
+                        )
+                    }
+                    libraryStore.markRemoved(track)
+                    libraryStore.markRemoved(stored)
+                    MusicLibraryEvents.postRemoved(stored)
+                    if player.currentTrack?.id == track.id {
+                        isInLibrary = false
+                    }
+                } else {
+                    let added = try await environment.withAuthorizedToken {
+                        token in
+                        try await environment.musicService.addToLibrary(
+                            track,
+                            accessToken: token
+                        )
+                    }
+                    libraryStore.markAdded(source: track, stored: added)
+                    MusicLibraryEvents.postAdded(added)
+                    if player.currentTrack?.id == track.id {
+                        isInLibrary = true
+                    }
+                }
+                Haptics.selection()
+            } catch is CancellationError {
+                return
+            } catch {
+                player.errorMessage = L10n.format(
+                    removing
+                        ? "Не удалось удалить трек: %@"
+                        : "Не удалось добавить трек: %@",
+                    error.localizedDescription
                 )
             }
         }
-        .padding(.top, 4)
     }
 
-    private var timeline: some View {
-        VStack(spacing: 4) {
-            Slider(
-                value: Binding(
-                    get: { min(player.elapsed, max(player.duration, 1)) },
-                    set: { player.seek(to: $0) }
-                ),
-                in: 0...max(player.duration, 1)
-            )
-            .tint(.white)
-            HStack {
-                Text(player.elapsed.clockText)
-                Spacer()
-                Text("-\(max(player.duration - player.elapsed, 0).clockText)")
-            }
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(.white.opacity(0.66))
+    private func updateLibraryState() {
+        guard let track = player.currentTrack else {
+            isInLibrary = false
+            return
         }
-        .padding(.top, 14)
+        isInLibrary = libraryStore.contains(track)
+            || track.ownerID == sessionStore.session?.userID
     }
 
-    private var controls: some View {
-        HStack(spacing: 25) {
-            Button { player.toggleShuffle() } label: {
-                Image(systemName: "shuffle")
-                    .foregroundStyle(player.shuffleEnabled ? MuseeksPalette.pink : .white.opacity(0.76))
-                    .frame(width: 42, height: 52)
-            }
-            .buttonStyle(.plain)
-
-            Button { player.previous() } label: {
-                Image(systemName: "backward.end.fill")
-                    .font(.system(size: 30, weight: .semibold))
-                    .frame(width: 50, height: 58)
-            }
-            .buttonStyle(.plain)
-
-            Button { player.playPause() } label: {
-                ZStack {
-                    Circle().fill(.white)
-                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 30, weight: .bold))
-                        .foregroundStyle(.black)
-                        .offset(x: player.isPlaying ? 0 : 2)
+    private func toggleOffline(_ track: Track) {
+        Task {
+            do {
+                if offlineStore.contains(track) {
+                    offlineStore.remove(track)
+                } else {
+                    try await environment.downloadForOffline(track)
                 }
-                .frame(width: 72, height: 72)
-                .shadow(color: .black.opacity(0.22), radius: 15, y: 8)
+                Haptics.selection()
+            } catch is CancellationError {
+                return
+            } catch {
+                player.errorMessage = L10n.format(
+                    "Не удалось сохранить трек офлайн: %@",
+                    error.localizedDescription
+                )
             }
-            .buttonStyle(.plain)
-
-            Button { player.next() } label: {
-                Image(systemName: "forward.end.fill")
-                    .font(.system(size: 30, weight: .semibold))
-                    .frame(width: 50, height: 58)
-            }
-            .buttonStyle(.plain)
-
-            Button { player.cycleRepeatMode() } label: {
-                Image(systemName: player.repeatMode.systemImage)
-                    .foregroundStyle(player.repeatMode == .off ? .white.opacity(0.76) : MuseeksPalette.pink)
-                    .frame(width: 42, height: 52)
-            }
-            .buttonStyle(.plain)
         }
-        .font(.title3.weight(.semibold))
-        .padding(.top, 12)
-    }
-
-    private var bottomActions: some View {
-        HStack(spacing: 14) {
-            Button { showsLyrics = true } label: {
-                Label("Текст", systemImage: "quote.bubble")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 46)
-            }
-            .buttonStyle(.plain)
-            .museeksGlass(in: Capsule(), interactive: true)
-
-            Menu {
-                Button("15 минут") { player.scheduleSleepTimer(minutes: 15) }
-                Button("30 минут") { player.scheduleSleepTimer(minutes: 30) }
-                Button("60 минут") { player.scheduleSleepTimer(minutes: 60) }
-                if player.sleepTimerEnd != nil {
-                    Divider()
-                    Button("Отменить таймер", role: .destructive) { player.cancelSleepTimer() }
-                }
-            } label: {
-                Image(systemName: player.sleepTimerEnd == nil ? "timer" : "timer.circle.fill")
-                    .font(.title3.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 46)
-            }
-            .buttonStyle(.plain)
-            .museeksGlass(in: Capsule(), interactive: true)
-            .accessibilityLabel("Таймер сна")
-
-            AirPlayButton()
-                .frame(maxWidth: .infinity, minHeight: 46)
-                .museeksGlass(in: Capsule(), interactive: true)
-                .accessibilityLabel("AirPlay")
-        }
-        .padding(.top, 15)
     }
 }
 
-private struct AirPlayButton: UIViewRepresentable {
-    func makeUIView(context: Context) -> AVRoutePickerView {
-        let view = AVRoutePickerView()
-        view.prioritizesVideoDevices = false
-        view.tintColor = .white
-        view.activeTintColor = UIColor(MuseeksPalette.pink)
-        return view
+enum PlayerLayoutMode: Equatable {
+    case compact
+    case standard
+    case tall
+    case landscape
+}
+
+struct PlayerLayoutMetrics: Equatable {
+    let mode: PlayerLayoutMode
+    let usesAccessibilityText: Bool
+    let contentWidth: CGFloat
+    let leadingPadding: CGFloat
+    let trailingPadding: CGFloat
+    let headerHeight: CGFloat
+    let headerTopPadding: CGFloat
+    let artworkSize: CGFloat
+    let artworkTopSpacing: CGFloat
+    let metadataTopSpacing: CGFloat
+    let progressTopSpacing: CGFloat
+    let controlsTopSpacing: CGFloat
+    let primaryControlsHeight: CGFloat
+    let quickActionsTopSpacing: CGFloat
+    let quickActionsHeight: CGFloat
+    let bottomPadding: CGFloat
+    let landscapeColumnSpacing: CGFloat
+    let minimumContentHeight: CGFloat
+
+    static func resolve(
+        containerSize: CGSize,
+        safeBottom: CGFloat = 0,
+        safeLeading: CGFloat = 0,
+        safeTrailing: CGFloat = 0,
+        usesAccessibilityText: Bool = false,
+        hasAlbum: Bool = true
+    ) -> PlayerLayoutMetrics {
+        let isLandscape =
+            containerSize.width > containerSize.height * 1.12
+        let mode: PlayerLayoutMode
+        if isLandscape {
+            mode = .landscape
+        } else if containerSize.height < 720 {
+            mode = .compact
+        } else if containerSize.height < 860 {
+            mode = .standard
+        } else {
+            mode = .tall
+        }
+
+        let portraitProgress = min(
+            max((containerSize.height - 667) / (932 - 667), 0),
+            1
+        )
+        func portraitValue(
+            _ compact: CGFloat,
+            _ tall: CGFloat
+        ) -> CGFloat {
+            compact + (tall - compact) * portraitProgress
+        }
+        let baseHorizontalPadding: CGFloat = mode == .landscape
+            ? 14
+            : portraitValue(18, 22)
+        let leadingPadding = max(
+            baseHorizontalPadding,
+            safeLeading + (mode == .landscape ? 8 : 0)
+        )
+        let trailingPadding = max(
+            baseHorizontalPadding,
+            safeTrailing + (mode == .landscape ? 8 : 0)
+        )
+        let contentWidth = max(
+            containerSize.width - leadingPadding - trailingPadding,
+            0
+        )
+
+        let headerHeight: CGFloat = 44
+        let headerTopPadding: CGFloat
+        let artworkTopSpacing: CGFloat
+        let metadataTopSpacing: CGFloat
+        let progressTopSpacing: CGFloat
+        let controlsTopSpacing: CGFloat
+        let quickActionsTopSpacing: CGFloat
+        let artworkRatio: CGFloat
+
+        if mode == .landscape {
+            headerTopPadding = 2
+            artworkTopSpacing = 2
+            metadataTopSpacing = 0
+            progressTopSpacing = 4
+            controlsTopSpacing = 4
+            quickActionsTopSpacing = 4
+            artworkRatio = 0.55
+        } else {
+            headerTopPadding = portraitValue(4, 10)
+            artworkTopSpacing = portraitValue(8, 20)
+            metadataTopSpacing = portraitValue(8, 12)
+            progressTopSpacing = portraitValue(6, 10)
+            controlsTopSpacing = portraitValue(4, 9)
+            quickActionsTopSpacing = portraitValue(6, 8)
+            artworkRatio = portraitValue(0.35, 0.42)
+        }
+
+        let primaryControlsHeight: CGFloat = 60
+        let quickActionsHeight: CGFloat =
+            usesAccessibilityText ? 72 : 64
+        let bottomPadding = max(
+            safeBottom,
+            mode == .landscape ? 6 : 10
+        )
+        let metadataHeight: CGFloat
+        if usesAccessibilityText {
+            metadataHeight = hasAlbum ? 100 : 78
+        } else {
+            metadataHeight = hasAlbum ? 68 : 54
+        }
+        let progressHeight: CGFloat = usesAccessibilityText ? 45 : 39
+
+        let artworkSize: CGFloat
+        let minimumContentHeight: CGFloat
+        if mode == .landscape {
+            let availableMainHeight = max(
+                containerSize.height
+                    - headerTopPadding
+                    - headerHeight
+                    - artworkTopSpacing
+                    - quickActionsTopSpacing
+                    - quickActionsHeight
+                    - bottomPadding,
+                0
+            )
+            let rightColumnMinimum =
+                metadataHeight
+                + progressTopSpacing
+                + progressHeight
+                + controlsTopSpacing
+                + primaryControlsHeight
+            artworkSize = max(
+                min(
+                    min(
+                        contentWidth * 0.36,
+                        containerSize.height * artworkRatio
+                    ),
+                    availableMainHeight
+                ),
+                min(112, availableMainHeight)
+            )
+            minimumContentHeight =
+                headerTopPadding
+                + headerHeight
+                + artworkTopSpacing
+                + max(artworkSize, rightColumnMinimum)
+                + quickActionsTopSpacing
+                + quickActionsHeight
+                + bottomPadding
+        } else {
+            let fixedWithoutArtwork =
+                headerTopPadding
+                + headerHeight
+                + artworkTopSpacing
+                + metadataTopSpacing
+                + metadataHeight
+                + progressTopSpacing
+                + progressHeight
+                + controlsTopSpacing
+                + primaryControlsHeight
+                + quickActionsTopSpacing
+                + quickActionsHeight
+                + bottomPadding
+            let availableArtworkHeight = max(
+                containerSize.height - fixedWithoutArtwork,
+                0
+            )
+            artworkSize = max(
+                min(
+                    min(
+                        contentWidth,
+                        containerSize.height * artworkRatio
+                    ),
+                    availableArtworkHeight
+                ),
+                min(112, availableArtworkHeight)
+            )
+            minimumContentHeight = fixedWithoutArtwork + artworkSize
+        }
+
+        return PlayerLayoutMetrics(
+            mode: mode,
+            usesAccessibilityText: usesAccessibilityText,
+            contentWidth: contentWidth,
+            leadingPadding: leadingPadding,
+            trailingPadding: trailingPadding,
+            headerHeight: headerHeight,
+            headerTopPadding: headerTopPadding,
+            artworkSize: artworkSize,
+            artworkTopSpacing: artworkTopSpacing,
+            metadataTopSpacing: metadataTopSpacing,
+            progressTopSpacing: progressTopSpacing,
+            controlsTopSpacing: controlsTopSpacing,
+            primaryControlsHeight: primaryControlsHeight,
+            quickActionsTopSpacing: quickActionsTopSpacing,
+            quickActionsHeight: quickActionsHeight,
+            bottomPadding: bottomPadding,
+            landscapeColumnSpacing: mode == .landscape ? 20 : 0,
+            minimumContentHeight: minimumContentHeight
+        )
     }
 
-    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
+    func quickActionsBottomY(containerHeight: CGFloat) -> CGFloat {
+        max(containerHeight - bottomPadding, 0)
+    }
+
+    func requiresAccessibilityScrolling(containerHeight: CGFloat) -> Bool {
+        mode == .landscape
+            && usesAccessibilityText
+            && minimumContentHeight > containerHeight + 0.5
+    }
+}
+
+private enum PlayerSheet: Identifiable {
+    case queue
+    case lyrics(Track)
+    case artist(String)
+    case playlists(Track)
+    case settings
+    case actions(Track)
+
+    var id: String {
+        switch self {
+        case .queue:
+            return "queue"
+        case let .lyrics(track):
+            return "lyrics-\(track.id)"
+        case let .artist(artist):
+            return "artist-\(artist)"
+        case let .playlists(track):
+            return "playlists-\(track.id)"
+        case .settings:
+            return "settings"
+        case let .actions(track):
+            return "actions-\(track.id)"
+        }
+    }
+}
+
+private enum DeferredPlayerAction {
+    case sheet(PlayerSheet)
+    case share(Track)
+}
+
+struct PlayerActionAvailability: Equatable {
+    let canModifyLibrary: Bool
+    let canAddToPlaylist: Bool
+    let canShare: Bool
+    let showsLibraryProgress: Bool
+    let showsOfflineControls: Bool
+
+    init(
+        hasSession: Bool,
+        isUpdatingLibrary: Bool,
+        showsOfflineControls: Bool = OfflineDownloadsFeature.showsControls
+    ) {
+        canModifyLibrary = hasSession && !isUpdatingLibrary
+        canAddToPlaylist = hasSession
+        canShare = true
+        showsLibraryProgress = isUpdatingLibrary
+        self.showsOfflineControls = showsOfflineControls
+    }
+}
+
+enum PlayerActionSheetMetrics {
+    static let preferredHeight: CGFloat = 520
+    static let minimumTapTarget: CGFloat = 52
+}
+
+enum PlayerDismissGesturePolicy {
+    static func shouldDismiss(
+        translation: CGSize,
+        predictedEndTranslation: CGSize
+    ) -> Bool {
+        let vertical = translation.height
+        let horizontal = abs(translation.width)
+        guard vertical >= 80,
+              vertical > horizontal * 1.25 else {
+            return false
+        }
+        return vertical >= 140 || predictedEndTranslation.height >= 120
+    }
+}
+
+enum PlayerArtworkCarouselPolicy {
+    struct Layout: Equatable {
+        let centerSize: CGFloat
+        let neighborSize: CGFloat
+        let neighborOffset: CGFloat
+    }
+
+    struct NeighborIndices: Equatable {
+        let previous: Int?
+        let next: Int?
+    }
+
+    static func layout(for artworkSize: CGFloat) -> Layout {
+        let safeSize = max(artworkSize, 0)
+        let centerSize = safeSize * 0.84
+        return Layout(
+            centerSize: centerSize,
+            neighborSize: centerSize * 0.82,
+            neighborOffset: safeSize * 0.5
+        )
+    }
+
+    static func neighborIndices(
+        queueCount: Int,
+        currentIndex: Int?,
+        repeatMode: RepeatMode
+    ) -> NeighborIndices {
+        guard queueCount > 1,
+              let currentIndex,
+              (0..<queueCount).contains(currentIndex) else {
+            return NeighborIndices(previous: nil, next: nil)
+        }
+        let previous: Int?
+        if currentIndex > 0 {
+            previous = currentIndex - 1
+        } else {
+            previous = repeatMode == .all ? queueCount - 1 : nil
+        }
+        let next: Int?
+        if currentIndex + 1 < queueCount {
+            next = currentIndex + 1
+        } else {
+            next = repeatMode == .all ? 0 : nil
+        }
+        return NeighborIndices(previous: previous, next: next)
+    }
+}
+
+private struct PlayerActionsSheet: View {
+    let track: Track
+    let isInLibrary: Bool
+    let offlineState: OfflineTrackState
+    let availability: PlayerActionAvailability
+    @Binding var equalizerEnabled: Bool
+    @Binding var spatialAudioEnabled: Bool
+    @EnvironmentObject private var player: AudioPlayer
+    @StateObject private var systemVolume = SystemVolumeObserver()
+    @State private var showsSleepTimerOptions = false
+    let onDismiss: () -> Void
+    let onLibrary: () -> Void
+    let onArtist: () -> Void
+    let onPlaylist: () -> Void
+    let onShare: () -> Void
+    let onCopyLink: () -> Void
+    let onOffline: () -> Void
+    let onSettings: () -> Void
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 10),
+        GridItem(.flexible(), spacing: 10)
+    ]
+
+    var body: some View {
+        ZStack {
+            ThemeBackground()
+
+            VStack(spacing: 0) {
+                header
+                    .adaptiveGlass(
+                        in: RoundedRectangle(
+                            cornerRadius: PremiumLayout.cardRadius,
+                            style: .continuous
+                        )
+                    )
+                    .padding(.horizontal, PremiumLayout.screenPadding)
+                    .padding(.top, 8)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        libraryAction
+
+                        sectionTitle("Действия с треком")
+                        LazyVGrid(columns: columns, spacing: 10) {
+                            actionTile(
+                                "Исполнитель",
+                                systemImage: "person.wave.2",
+                                action: onArtist
+                            )
+                            actionTile(
+                                "Добавить в плейлист",
+                                systemImage: "rectangle.stack.badge.plus",
+                                enabled: availability.canAddToPlaylist,
+                                action: onPlaylist
+                            )
+                            actionTile(
+                                "Поделиться аудиофайлом",
+                                systemImage: "square.and.arrow.up",
+                                enabled: availability.canShare,
+                                action: onShare
+                            )
+                            actionTile(
+                                "Скопировать ссылку VK",
+                                systemImage: "link",
+                                action: onCopyLink
+                            )
+                            if availability.showsOfflineControls {
+                                actionTile(
+                                    offlineTitle,
+                                    systemImage: offlineImage,
+                                    enabled: offlineState != .downloading,
+                                    action: onOffline
+                                )
+                            }
+                        }
+
+                        sectionTitle("Плеер и аудио")
+                        audioControls
+
+                        Text(L10n.text("Качество: автоматически VK"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 12)
+                            .padding(.horizontal, 4)
+                    }
+                    .padding(.horizontal, PremiumLayout.screenPadding)
+                    .padding(.bottom, 24)
+                }
+                .scrollIndicators(.hidden)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .presentationDetents([
+            .height(PlayerActionSheetMetrics.preferredHeight),
+            .large
+        ])
+        .presentationDragIndicator(.visible)
+        .confirmationDialog(
+            L10n.text("Остановить воспроизведение через…"),
+            isPresented: $showsSleepTimerOptions,
+            titleVisibility: .visible
+        ) {
+            ForEach([15, 30, 45, 60, 90], id: \.self) { minutes in
+                Button(L10n.minutes(minutes)) {
+                    player.scheduleSleepTimer(minutes: minutes)
+                    Haptics.success()
+                }
+            }
+            if player.sleepTimerEndDate != nil {
+                Button(
+                    L10n.text("Отключить таймер"),
+                    role: .destructive
+                ) {
+                    player.cancelSleepTimer()
+                    Haptics.selection()
+                }
+            }
+            Button(L10n.text("Отмена"), role: .cancel) {}
+        }
+    }
+
+    private var audioControls: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(
+                    systemName: systemVolume.volume <= 0.001
+                        ? "speaker.slash.fill"
+                        : "speaker.wave.2.fill"
+                )
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 30, height: 30)
+                .background(Color.accentColor.opacity(0.12), in: Circle())
+                .accessibilityHidden(true)
+
+                SystemVolumeSlider(
+                    tintColor: UIColor(named: "AccentColor") ?? .systemBlue
+                )
+                .frame(height: 28)
+                .accessibilityLabel(L10n.text("Громкость"))
+
+                Text(
+                    Double(systemVolume.volume),
+                    format: .percent.precision(.fractionLength(0))
+                )
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 38, alignment: .trailing)
+                .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: PlayerActionSheetMetrics.minimumTapTarget)
+
+            Divider()
+                .padding(.leading, 58)
+
+            Button(action: onSettings) {
+                HStack(spacing: 12) {
+                    actionRowLabel(
+                        "Эквалайзер",
+                        systemImage: "waveform"
+                    )
+                    Spacer()
+                    Text(
+                        equalizerEnabled
+                            ? L10n.text("Вкл")
+                            : L10n.text("Выкл")
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 16)
+                .frame(minHeight: PlayerActionSheetMetrics.minimumTapTarget)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PremiumPressStyle())
+            .accessibilityLabel(L10n.text("Эквалайзер"))
+            .accessibilityValue(
+                equalizerEnabled
+                    ? L10n.text("Вкл")
+                    : L10n.text("Выкл")
+            )
+
+            Divider()
+                .padding(.leading, 58)
+
+            Toggle(isOn: $spatialAudioEnabled) {
+                actionRowLabel(
+                    "Пространственный звук",
+                    systemImage: "dot.radiowaves.left.and.right"
+                )
+            }
+            .tint(.accentColor)
+            .padding(.horizontal, 16)
+            .frame(minHeight: PlayerActionSheetMetrics.minimumTapTarget)
+
+            Divider()
+                .padding(.leading, 58)
+
+            Button {
+                Haptics.open()
+                showsSleepTimerOptions = true
+            } label: {
+                HStack(spacing: 12) {
+                    actionRowLabel(
+                        "Таймер сна",
+                        systemImage: "moon.zzz"
+                    )
+                    Spacer()
+                    if let endDate = player.sleepTimerEndDate {
+                        Text(endDate, style: .timer)
+                            .font(.subheadline.monospacedDigit().weight(.medium))
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 16)
+                .frame(minHeight: PlayerActionSheetMetrics.minimumTapTarget)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PremiumPressStyle())
+            .accessibilityLabel(L10n.text("Таймер сна"))
+        }
+        .adaptiveGlass(in: RoundedRectangle(
+                cornerRadius: PremiumLayout.compactRadius,
+                style: .continuous
+            )
+        )
+    }
+
+    private func actionRowLabel(
+        _ title: String,
+        systemImage: String
+    ) -> some View {
+        Label {
+            Text(L10n.text(title))
+                .font(.body.weight(.semibold))
+        } icon: {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 30, height: 30)
+                .background(Color.accentColor.opacity(0.12), in: Circle())
+        }
+    }
+
+    private var offlineTitle: String {
+        switch offlineState {
+        case .remote:
+            return "Скачать офлайн"
+        case .downloading:
+            return "Загрузка…"
+        case .available:
+            return "Удалить загрузку"
+        }
+    }
+
+    private var offlineImage: String {
+        switch offlineState {
+        case .remote:
+            return "arrow.down.circle"
+        case .downloading:
+            return "arrow.triangle.2.circlepath"
+        case .available:
+            return "checkmark.circle.fill"
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            AsyncArtwork(url: track.artworkURL, size: 58)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(track.title)
+                    .font(.headline.weight(.bold))
+                    .lineLimit(1)
+                Text(track.artist)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 10)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .frame(width: 44, height: 44)
+                    .adaptiveGlass(in: Circle(), interactive: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.text("Закрыть"))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var libraryAction: some View {
+        Button(
+            role: isInLibrary ? .destructive : nil,
+            action: onLibrary
+        ) {
+            HStack(spacing: 12) {
+                Image(
+                    systemName: isInLibrary
+                        ? "heart.slash"
+                        : "heart"
+                )
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(
+                    isInLibrary ? Color.red : Color.accentColor
+                )
+                .frame(width: 34, height: 34)
+                .background(
+                    (isInLibrary ? Color.red : Color.accentColor)
+                        .opacity(0.12),
+                    in: Circle()
+                )
+
+                Text(
+                    L10n.text(
+                        isInLibrary
+                            ? "Удалить из медиатеки"
+                            : "Добавить в медиатеку"
+                    )
+                )
+                .font(.body.weight(.semibold))
+
+                Spacer()
+
+                if availability.showsLibraryProgress {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(
+                minHeight: PlayerActionSheetMetrics.minimumTapTarget
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PremiumPressStyle())
+        .foregroundStyle(Color.primary)
+        .adaptiveGlass(in: RoundedRectangle(
+                cornerRadius: PremiumLayout.compactRadius,
+                style: .continuous
+            ),
+            interactive: true,
+            tint: (isInLibrary ? Color.red : Color.accentColor).opacity(0.08)
+        )
+        .disabled(!availability.canModifyLibrary)
+        .padding(.top, 14)
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(L10n.text(title))
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
+            .tracking(0.7)
+            .padding(.horizontal, 4)
+            .padding(.top, 18)
+            .padding(.bottom, 8)
+    }
+
+    private func actionTile(
+        _ title: String,
+        systemImage: String,
+        enabled: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 9) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Color.accentColor.opacity(0.12),
+                        in: Circle()
+                    )
+                Text(L10n.text(title))
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: 66, alignment: .topLeading)
+            .padding(13)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PremiumPressStyle())
+        .foregroundStyle(Color.primary)
+        .adaptiveGlass(in: RoundedRectangle(
+                cornerRadius: PremiumLayout.compactRadius,
+                style: .continuous
+            ),
+            interactive: true
+        )
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.45)
+        .accessibilityLabel(L10n.text(title))
+    }
+}
+
+private struct AirPlayRoutePicker: UIViewRepresentable {
+    let tintColor: UIColor
+
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let picker = AVRoutePickerView(frame: .zero)
+        picker.tintColor = tintColor
+        picker.activeTintColor = tintColor
+        picker.prioritizesVideoDevices = false
+        return picker
+    }
+
+    func updateUIView(
+        _ picker: AVRoutePickerView,
+        context: Context
+    ) {
+        picker.tintColor = tintColor
+        picker.activeTintColor = tintColor
+    }
+}
+
+private struct CompactPlayerSlider: UIViewRepresentable {
+    @Binding var value: TimeInterval
+    let range: ClosedRange<TimeInterval>
+    let tintColor: UIColor
+    let onEditingBegan: () -> Void
+    let onCommit: (TimeInterval) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> UISlider {
+        let slider = UISlider(frame: .zero)
+        slider.isContinuous = true
+        configureColors(slider, coordinator: context.coordinator)
+        slider.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.valueChanged(_:)),
+            for: .valueChanged
+        )
+        slider.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.editingBegan(_:)),
+            for: .touchDown
+        )
+        slider.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.editingEnded(_:)),
+            for: [.touchUpInside, .touchUpOutside, .touchCancel]
+        )
+        return slider
+    }
+
+    func updateUIView(_ slider: UISlider, context: Context) {
+        context.coordinator.parent = self
+        if context.coordinator.cachedTintColor != tintColor {
+            configureColors(slider, coordinator: context.coordinator)
+        }
+        slider.minimumValue = Float(range.lowerBound)
+        slider.maximumValue = Float(max(range.upperBound, range.lowerBound + 1))
+        guard !slider.isTracking else { return }
+        let safeValue = value.isFinite ? value : range.lowerBound
+        let next = Float(min(max(safeValue, range.lowerBound), range.upperBound))
+        if abs(slider.value - next) >= 0.05 {
+            slider.setValue(next, animated: false)
+        }
+    }
+
+    private func configureColors(
+        _ slider: UISlider,
+        coordinator: Coordinator
+    ) {
+        slider.minimumTrackTintColor = tintColor
+        slider.maximumTrackTintColor = tintColor.withAlphaComponent(0.18)
+        slider.setThumbImage(
+            coordinator.thumb(diameter: 12, tint: tintColor),
+            for: .normal
+        )
+        slider.setThumbImage(
+            coordinator.thumb(diameter: 15, tint: tintColor),
+            for: .highlighted
+        )
+        coordinator.cachedTintColor = tintColor
+    }
+
+    final class Coordinator: NSObject {
+        var parent: CompactPlayerSlider
+        var cachedTintColor: UIColor?
+        private var thumbCache: [String: UIImage] = [:]
+
+        init(parent: CompactPlayerSlider) {
+            self.parent = parent
+        }
+
+        func thumb(diameter: CGFloat, tint: UIColor) -> UIImage {
+            let key = "\(diameter)-\(tint.hash)"
+            if let cached = thumbCache[key] {
+                return cached
+            }
+            let size = CGSize(width: diameter, height: diameter)
+            let image = UIGraphicsImageRenderer(size: size).image { context in
+                context.cgContext.setShadow(
+                    offset: CGSize(width: 0, height: 1),
+                    blur: 3,
+                    color: UIColor.black.withAlphaComponent(0.28).cgColor
+                )
+                tint.setFill()
+                UIBezierPath(
+                    ovalIn: CGRect(origin: .zero, size: size).insetBy(
+                        dx: 0.5,
+                        dy: 0.5
+                    )
+                )
+                .fill()
+            }
+            thumbCache[key] = image
+            return image
+        }
+
+        @objc
+        func valueChanged(_ slider: UISlider) {
+            if !slider.isTracking {
+                parent.onEditingBegan()
+            }
+            parent.value = TimeInterval(slider.value)
+            if !slider.isTracking {
+                parent.onCommit(TimeInterval(slider.value))
+            }
+        }
+
+        @objc
+        func editingBegan(_ slider: UISlider) {
+            parent.onEditingBegan()
+        }
+
+        @objc
+        func editingEnded(_ slider: UISlider) {
+            parent.value = TimeInterval(slider.value)
+            parent.onCommit(TimeInterval(slider.value))
+        }
+    }
+}
+
+private struct PlayerControlStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @EnvironmentObject private var settings: AppSettings
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(settings.theme == .light ? .black : .white)
+            .scaleEffect(
+                reduceMotion
+                    ? 1
+                    : (configuration.isPressed ? 0.96 : 1)
+            )
+            .opacity(configuration.isPressed ? 0.78 : 1)
+            .animation(
+                reduceMotion
+                    ? nil
+                    : .easeOut(duration: 0.1),
+                value: configuration.isPressed
+            )
+    }
 }

@@ -1,23 +1,26 @@
 import SwiftUI
 
 @main
-@MainActor
 struct MuseeksApp: App {
-    @StateObject private var environment: AppEnvironment
-
-    init() {
-        _environment = StateObject(wrappedValue: AppEnvironment())
-    }
+    @UIApplicationDelegateAdaptor(AppDelegate.self)
+    private var appDelegate
+    @StateObject private var environment = AppEnvironment()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(environment)
+                .environmentObject(environment.settings)
                 .environmentObject(environment.sessionStore)
                 .environmentObject(environment.networkMonitor)
+                .environmentObject(environment.historyStore)
+                .environmentObject(environment.libraryStore)
+                .environmentObject(environment.homeCatalogStore)
+                .environmentObject(environment.likedAlbumsStore)
+                .environmentObject(environment.offlineStore)
+                .environmentObject(environment.pinnedMixStore)
                 .environmentObject(environment.player)
-                .environmentObject(environment.history)
-                .environmentObject(environment.library)
+                .environmentObject(environment.player.progress)
         }
     }
 }

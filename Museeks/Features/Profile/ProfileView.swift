@@ -3,87 +3,163 @@ import SwiftUI
 struct ProfileView: View {
     @EnvironmentObject private var environment: AppEnvironment
     @EnvironmentObject private var sessionStore: SessionStore
-    @EnvironmentObject private var history: ListeningHistory
-    @State private var confirmsLogout = false
-    @State private var confirmsHistoryClear = false
+    @EnvironmentObject private var scrollCoordinator: MainTabScrollCoordinator
+    @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var showingLogoutConfirmation = false
 
     var body: some View {
-        ZStack {
-            AppBackground()
-            List {
-                profileHeader
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-
-                Section("Сессия") {
-                    LabeledContent("Хранение", value: "Keychain")
-                    if let expiration = sessionStore.session?.expiresAt {
-                        LabeledContent("Действует до") {
-                            Text(expiration, style: .date)
-                        }
-                    } else {
-                        LabeledContent("Срок действия", value: "Без ограничения")
-                    }
-                    Button {
-                        Task { await environment.maintainSession(force: true) }
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 22) {
+                    profileCard
+                    NavigationLink {
+                        SettingsView()
                     } label: {
-                        Label(
-                            environment.isMaintainingSession ? "Обновляем…" : "Обновить подключение",
-                            systemImage: "arrow.triangle.2.circlepath"
+                        Label("Настройки", systemImage: "gearshape.fill")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                            .premiumCard(interactive: true)
+                    }
+                    .buttonStyle(.plain)
+                    linksCard
+
+                    Button(role: .destructive) {
+                        showingLogoutConfirmation = true
+                    } label: {
+                        Label("Выйти", systemImage: "rectangle.portrait.and.arrow.right")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                            .premiumCard(interactive: true)
+                    }
+
+                    VStack(spacing: 8) {
+                        Image("AppIconPreview")
+                            .resizable()
+                            .frame(width: 60, height: 60)
+                            .clipShape(
+                                RoundedRectangle(
+                                    cornerRadius: PremiumLayout.controlRadius,
+                                    style: .continuous
+                                )
+                            )
+                        Text("Museeks \(version)")
+                            .foregroundStyle(.secondary)
+                        Text("Werhes")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.top, 28)
+                }
+                .id(MainTabScrollDestination.profile)
+                .padding()
+            }
+            .onReceive(scrollCoordinator.$request) { request in
+                guard request?.destination == .profile else { return }
+                if reduceMotion {
+                    proxy.scrollTo(MainTabScrollDestination.profile, anchor: .top)
+                } else {
+                    withAnimation(.easeOut(duration: 0.28)) {
+                        proxy.scrollTo(
+                            MainTabScrollDestination.profile,
+                            anchor: .top
                         )
                     }
-                    .disabled(environment.isMaintainingSession)
-                }
-
-                Section("Данные") {
-                    Button { confirmsHistoryClear = true } label: {
-                        Label("Очистить историю прослушиваний", systemImage: "clock.arrow.circlepath")
-                    }
-                    LabeledContent("Сохранено в истории", value: String(history.tracks.count))
-                }
-
-                Section("О приложении") {
-                    LabeledContent("Приложение", value: "Museeks")
-                    LabeledContent("Версия", value: appVersion)
-                    Label("Без аналитики и рекламных SDK", systemImage: "hand.raised.fill")
-                        .foregroundStyle(.secondary)
-                }
-
-                Section {
-                    Button("Выйти из VK", role: .destructive) { confirmsLogout = true }
-                } footer: {
-                    Text("При выходе токен и данные веб-сессии удаляются из Keychain.")
                 }
             }
-            .scrollContentBackground(.hidden)
         }
+        .background(ThemeBackground())
         .navigationTitle("Профиль")
-        .confirmationDialog("Выйти из VK?", isPresented: $confirmsLogout) {
-            Button("Выйти", role: .destructive) { environment.logout() }
+        .confirmationDialog(
+            "Выйти из Museeks?",
+            isPresented: $showingLogoutConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Выйти", role: .destructive) {
+                sessionStore.logout()
+            }
+            Button("Отмена", role: .cancel) {}
         } message: {
-            Text("Для нового входа потребуется снова открыть страницу VK.")
-        }
-        .confirmationDialog("Очистить историю?", isPresented: $confirmsHistoryClear) {
-            Button("Очистить", role: .destructive) { history.clear() }
+            Text(
+                L10n.text(
+                    "После выхода сохранённая сессия будет удалена с этого "
+                        + "устройства. Для подключения потребуется снова "
+                        + "войти в VK."
+                )
+            )
         }
     }
 
-    private var profileHeader: some View {
-        VStack(spacing: 12) {
-            ArtworkView(url: sessionStore.profile?.photoURL, size: 94, cornerRadius: 47)
-            Text(sessionStore.profile?.fullName ?? "Пользователь VK")
-                .font(.title2.bold())
-            Text("Музыка VK подключена")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 18)
+    private var version: String {
+        Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleShortVersionString"
+        ) as? String ?? "—"
     }
 
-    private var appVersion: String {
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
-        return "\(version) (\(build))"
+    private var profileCard: some View {
+        HStack(spacing: 16) {
+            AsyncArtwork(url: sessionStore.profile?.photoURL, size: 76)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(
+                    sessionStore.profile?.displayName
+                        ?? L10n.text("Слушатель")
+                )
+                    .font(.title3.bold())
+                Text("Museeks")
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding()
+        .premiumCard()
+    }
+
+    private var linksCard: some View {
+        VStack(spacing: 0) {
+            linkButton(
+                title: "Museeks на GitHub",
+                subtitle: "Исходный код и обновления",
+                icon: "chevron.left.forwardslash.chevron.right",
+                url: environment.configuration.projectURL
+            )
+            Divider().padding(.leading, 54)
+            linkButton(
+                title: "Сообщить о проблеме",
+                subtitle: "Открыть список задач",
+                icon: "exclamationmark.bubble.fill",
+                url: environment.configuration.issuesURL
+            )
+        }
+        .padding(.horizontal)
+        .premiumCard()
+    }
+
+    private func linkButton(
+        title: String,
+        subtitle: String,
+        icon: String,
+        url: URL
+    ) -> some View {
+        Button {
+            openURL(url)
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: icon)
+                    .frame(width: 28)
+                    .foregroundStyle(.primary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L10n.text(title))
+                        .foregroundStyle(.primary)
+                    Text(L10n.text(subtitle))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "arrow.up.right")
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.vertical, 15)
+        }
+        .buttonStyle(.plain)
     }
 }

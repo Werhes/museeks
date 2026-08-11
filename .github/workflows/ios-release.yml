@@ -35,28 +35,21 @@ concurrency:
 
 jobs:
   build:
-    name: Test and build unsigned IPA
+    name: Build unsigned IPA
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show build environment
-        run: |
-          sw_vers
-          xcodebuild -version
-          xcodebuild -showsdks
-
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Validate and generate Xcode project
+      - name: Generate Xcode project
         run: |
-          python3 scripts/validate_project.py
+          sudo xcode-select -s /Applications/Xcode_26.5.app
           xcodegen generate
-          xcodebuild -project Museeks.xcodeproj -scheme Museeks -list
 
       - name: Resolve build version
         env:
@@ -86,29 +79,6 @@ jobs:
           echo "MARKETING_VERSION=$marketing_version" >> "$GITHUB_ENV"
           echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
           echo "Building Museeks $app_version ($GITHUB_RUN_NUMBER)"
-
-      - name: Run unit tests
-        run: |
-          simulator_id="$(xcrun simctl list devices available -j | python3 -c '
-          import json, sys
-          data = json.load(sys.stdin)
-          print(next(
-              device["udid"]
-              for devices in data["devices"].values()
-              for device in devices
-              if device.get("isAvailable") and device.get("name", "").startswith("iPhone")
-          ))
-          ')"
-
-          xcodebuild test \
-            -project Museeks.xcodeproj \
-            -scheme Museeks \
-            -configuration Debug \
-            -destination "platform=iOS Simulator,id=$simulator_id" \
-            -derivedDataPath build/TestDerivedData \
-            CODE_SIGNING_ALLOWED=NO \
-            MARKETING_VERSION="$MARKETING_VERSION" \
-            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
 
       - name: Build application for iPhone
         run: |

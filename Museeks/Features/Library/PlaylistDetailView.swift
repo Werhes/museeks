@@ -1,100 +1,382 @@
 import SwiftUI
 
 struct PlaylistDetailView: View {
-    let playlist: Playlist
     @EnvironmentObject private var environment: AppEnvironment
-    @EnvironmentObject private var player: PlayerController
-    @State private var tracks: [Track] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    @EnvironmentObject private var sessionStore: SessionStore
+    @EnvironmentObject private var player: AudioPlayer
+    @EnvironmentObject private var settings: AppSettings
+    @ObservedObject private var offlinePlaylists =
+        OfflinePlaylistStore.shared
+    let playlist: Playlist
+    @StateObject private var model = PlaylistDetailViewModel()
 
     var body: some View {
-        ZStack {
-            AppBackground()
-            ScrollView {
-                LazyVStack(spacing: 14) {
-                    header
-                    if isLoading && tracks.isEmpty {
-                        ProgressView().padding(.top, 50)
-                    } else {
-                        ForEach(tracks) { track in
-                            TrackRow(
-                                track: track,
-                                isCurrent: player.currentTrack?.id == track.id,
-                                isPlaying: player.isPlaying
-                            ) { player.play(track, in: tracks, title: playlist.title) }
-                            .contextMenu {
-                                Button { player.playNext(track) } label: {
-                                    Label("Играть следующей", systemImage: "text.line.first.and.arrowtriangle.forward")
+        List {
+            Section {
+                playlistHeader
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+            ForEach(model.tracks) { track in
+                TrackRow(
+                    track: track,
+                    queue: model.tracks,
+                    source: .playlist(title: playlist.title)
+                )
+                    .listRowBackground(Color.clear)
+                    .swipeActions(edge: .trailing) {
+                        if playlist.ownerID
+                            == sessionStore.session?.userID {
+                            Button(role: .destructive) {
+                                Task {
+                                    await remove(track)
                                 }
-                                Button { player.addToQueue(track) } label: {
-                                    Label("Добавить в очередь", systemImage: "text.badge.plus")
-                                }
+                            } label: {
+                                Label("Убрать", systemImage: "minus")
                             }
                         }
                     }
+                    .onAppear {
+                        guard track.id == model.tracks.last?.id else {
+                            return
+                        }
+                        Task { await loadMore() }
+                    }
+            }
+            if !model.tracks.isEmpty, let error = model.errorMessage {
+                // Defect 17: pagination failures surface as a retry row
+                // instead of replacing the already-loaded list.
+                Button {
+                    Task { await loadMore() }
+                } label: {
+                    Label(error, systemImage: "arrow.clockwise")
+                        .font(.subheadline)
+                        .multilineTextAlignment(.leading)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 30)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(ThemeBackground())
         .navigationTitle(playlist.title)
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
-        .refreshable { await load() }
-        .alert("Не удалось открыть плейлист", isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) { Button("ОК", role: .cancel) {} } message: { Text(errorMessage ?? "") }
-    }
-
-    private var header: some View {
-        VStack(spacing: 14) {
-            ArtworkView(url: playlist.artworkURL, size: 230, cornerRadius: 28)
-                .shadow(color: .black.opacity(0.22), radius: 24, y: 12)
-            VStack(spacing: 5) {
-                Text(playlist.title).font(.title2.bold()).multilineTextAlignment(.center)
-                if let subtitle = playlist.subtitle, !subtitle.isEmpty {
-                    Text(subtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(3)
+        .toolbar {
+            if OfflineDownloadsFeature.showsControls {
+                ToolbarItem(placement: .topBarTrailing) {
+                    offlineButton
                 }
             }
-            Button {
-                if let first = tracks.first { player.play(first, in: tracks, title: playlist.title) }
-            } label: {
-                Label("Воспроизвести", systemImage: "play.fill")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 24)
-                    .frame(height: 48)
-                    .background(MuseeksPalette.accent, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(tracks.isEmpty)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
+        .overlay {
+            if model.isLoading && model.tracks.isEmpty {
+                ProgressView("Загружаем треки…")
+            } else if let error = model.errorMessage, model.tracks.isEmpty {
+                EmptyStateView(
+                    title: "Не удалось открыть плейлист",
+                    systemImage: "wifi.exclamationmark",
+                    description: error
+                )
+                .background(ThemeBackground())
+            } else if model.tracks.isEmpty {
+                EmptyStateView(
+                    title: playlist.title,
+                    systemImage: "music.note",
+                    description: "В плейлисте пока нет доступных треков."
+                )
+                .background(ThemeBackground())
+            }
+        }
+        .task { await load() }
+        .task(id: sessionStore.resolvedOfflineAccountID) {
+            offlinePlaylists.configure(
+                accountID: sessionStore.resolvedOfflineAccountID
+            )
+        }
+        .refreshable { await load(force: true) }
     }
 
-    @MainActor
-    private func load() async {
-        guard let token = environment.sessionStore.session?.accessToken else { return }
+    private var playlistHeader: some View {
+        VStack(spacing: 14) {
+            PlaylistArtworkView(playlist: playlist, size: 190)
+                .shadow(color: .black.opacity(0.22), radius: 16, y: 8)
+            VStack(spacing: 5) {
+                Text(playlist.title)
+                    .font(.title2.weight(.bold))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                Label(
+                    L10n.format(
+                        "Импортировано из %@",
+                        playlist.source.title
+                    ),
+                    systemImage: "arrow.down.circle"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                Text(L10n.trackCount(playlist.count))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if OfflineDownloadsFeature.showsControls,
+                   let record = offlinePlaylists.record(for: playlist) {
+                    let status = OfflinePlaylistStatus.status(for: record)
+                    if status.isActive {
+                        VStack(spacing: 3) {
+                            if let progress = status.progress {
+                                ProgressView(value: progress)
+                                    .frame(width: 120)
+                            }
+                            Text(status.localizedText ?? "")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        .padding(.top, 2)
+                    }
+                }
+            }
+            listenButton
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+    }
+
+    /// A play icon inside a wide Label pushes the text off-center (the
+    /// icon+text group is centered as a unit, but the icon's width isn't
+    /// mirrored on the trailing side). Centering the text on its own and
+    /// pinning the icon to the leading edge keeps "Слушать" dead-center
+    /// regardless of button width.
+    private var listenButtonLabel: some View {
+        ZStack {
+            Text(L10n.text("Слушать"))
+                .font(.headline)
+            HStack {
+                Image(systemName: "play.fill")
+                    .accessibilityHidden(true)
+                Spacer()
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 46)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var listenButton: some View {
+        if #available(iOS 26.0, *) {
+            Button(action: playPlaylist) {
+                listenButtonLabel
+            }
+            .buttonStyle(.glassProminent)
+            .tint(settings.theme.accent)
+            .disabled(model.tracks.isEmpty)
+        } else {
+            Button(action: playPlaylist) {
+                listenButtonLabel
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(settings.theme.accent)
+            .disabled(model.tracks.isEmpty)
+        }
+    }
+
+    private func playPlaylist() {
+        guard let first = model.tracks.first else { return }
+        player.play(
+            first,
+            in: model.tracks,
+            source: .playlist(title: playlist.title)
+        )
+    }
+
+    private enum OfflineButtonState {
+        case active
+        case downloaded
+        case needsDownload
+    }
+
+    /// Defect 5: derived from the playlist status AND the real track files,
+    /// never from stale metadata alone. If files were deleted locally the
+    /// button flips back to download even when the record still says
+    /// `.available`.
+    private var offlineButtonState: OfflineButtonState {
+        guard let record = offlinePlaylists.record(for: playlist) else {
+            return .needsDownload
+        }
+        if OfflinePlaylistStatus.status(for: record).isActive {
+            return .active
+        }
+        if record.state == .available || record.state == .partial {
+            let missing = record.tracks.contains {
+                !environment.offlineStore.contains($0)
+            }
+            return missing ? .needsDownload : .downloaded
+        }
+        return .needsDownload
+    }
+
+    @ViewBuilder
+    private var offlineButton: some View {
+        switch offlineButtonState {
+        case .active:
+            Button {
+                offlinePlaylists.cancelDownload(for: playlist)
+            } label: {
+                Label("Отменить загрузку", systemImage: "xmark.circle")
+            }
+        case .downloaded:
+            Menu {
+                Button(role: .destructive) {
+                    offlinePlaylists.remove(playlist)
+                } label: {
+                    Label("Удалить плейлист", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "arrow.down.circle.fill")
+            }
+        case .needsDownload:
+            Button {
+                startOfflineDownload()
+            } label: {
+                Label("Скачать плейлист", systemImage: "arrow.down.circle")
+            }
+        }
+    }
+
+    private func startOfflineDownload() {
+        guard sessionStore.accessToken != nil else { return }
+        offlinePlaylists.startDownload(
+            playlist: playlist,
+            fetchPage: { offset in
+                try await environment.withAuthorizedToken { token in
+                    try await environment.musicService.playlistTracks(
+                        playlist,
+                        accessToken: token,
+                        offset: offset,
+                        count: 100
+                    )
+                }
+            },
+            downloadTrack: { track in
+                try await environment.downloadForOffline(track)
+            }
+        )
+    }
+
+    private func remove(_ track: Track) async {
+        guard let token = sessionStore.accessToken else { return }
+        await model.remove(
+            track,
+            playlist: playlist,
+            service: environment.musicService,
+            accessToken: token
+        )
+    }
+
+    private func load(force: Bool = false) async {
+        guard sessionStore.accessToken != nil else { return }
+        await model.load(force: force) {
+            try await environment.withAuthorizedToken { token in
+                try await environment.musicService.playlistTracks(
+                    playlist,
+                    accessToken: token,
+                    offset: 0,
+                    count: 100
+                )
+            }
+        }
+    }
+
+    private func loadMore() async {
+        guard sessionStore.accessToken != nil else { return }
+        await model.loadMore { offset in
+            try await environment.withAuthorizedToken { token in
+                try await environment.musicService.playlistTracks(
+                    playlist,
+                    accessToken: token,
+                    offset: offset,
+                    count: 100
+                )
+            }
+        }
+    }
+}
+
+@MainActor
+private final class PlaylistDetailViewModel: ObservableObject {
+    @Published private(set) var tracks: [Track] = []
+    @Published private(set) var isLoading = false
+    @Published private(set) var isLoadingMore = false
+    @Published var errorMessage: String?
+    private var nextOffset: Int?
+
+    func load(
+        force: Bool = false,
+        operation: () async throws -> MusicPage<Track>
+    ) async {
+        guard !isLoading, force || tracks.isEmpty else { return }
         isLoading = true
         defer { isLoading = false }
         do {
-            var loaded: [Track] = []
-            var offset = 0
-            for _ in 0..<25 {
-                let page = try await environment.musicService.playlistTracks(
-                    token: token,
-                    playlist: playlist,
-                    offset: offset
-                )
-                loaded.append(contentsOf: page.items)
-                guard let next = page.nextOffset else { break }
-                offset = next
-            }
-            tracks = loaded
+            let page = try await operation()
+            tracks = page.items
+            nextOffset = page.nextOffset
             errorMessage = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func loadMore(
+        operation: (Int) async throws -> MusicPage<Track>
+    ) async {
+        guard !isLoading,
+              !isLoadingMore,
+              let offset = nextOffset else {
+            return
+        }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+        do {
+            let page = try await operation(offset)
+            // Defect 17: the offset must strictly advance, otherwise a
+            // server quirk would loop the same page forever.
+            guard let next = page.nextOffset, next > offset else {
+                nextOffset = nil
+                return
+            }
+            var known = Set(tracks.map(\.id))
+            tracks.append(contentsOf: page.items.filter {
+                known.insert($0.id).inserted
+            })
+            nextOffset = next
+            errorMessage = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func remove(
+        _ track: Track,
+        playlist: Playlist,
+        service: any MusicService,
+        accessToken: String
+    ) async {
+        do {
+            try await service.remove(
+                track,
+                from: playlist,
+                accessToken: accessToken
+            )
+            tracks.removeAll { $0.id == track.id }
+            errorMessage = nil
+        } catch is CancellationError {
+            return
         } catch {
             errorMessage = error.localizedDescription
         }

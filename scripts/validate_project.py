@@ -15,8 +15,13 @@ REQUIRED = [
     ROOT / "Museeks/Services/VKWebAuthService.swift",
     ROOT / "Museeks/Services/VKMusicService.swift",
     ROOT / "Museeks/Core/Security/KeychainStore.swift",
-    ROOT / "Museeks/Player/PlayerController.swift",
-    ROOT / "Museeks/Features/Shared/GlassDesign.swift",
+    ROOT / "Museeks/Player/AudioPlayer.swift",
+    ROOT / "Museeks/Features/Player/PlayerView.swift",
+    ROOT / "Museeks/Features/Root/MainTabView.swift",
+    ROOT / "Museeks/Features/Shared/AdaptiveGlass.swift",
+    ROOT / "Museeks/Services/VKAudioURLResolver.swift",
+    ROOT / "Museeks/Services/HLSOfflineDownloadService.swift",
+    ROOT / "Museeks/Services/HLSSegmentExporter.swift",
     ROOT / "Museeks/Resources/Info.plist",
     ROOT / "Museeks/Resources/PrivacyInfo.xcprivacy",
     ROOT / ".github/workflows/ios-release.yml",
@@ -82,6 +87,8 @@ def main() -> None:
         raise AssertionError("Liquid Glass integration is missing")
     if "kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly" not in source:
         raise AssertionError("Expected device-bound Keychain accessibility")
+    if "private static let productionEnabled = true" not in source:
+        raise AssertionError("Offline downloads must be enabled in production")
     if "UIBackgroundModes" not in (ROOT / "Museeks/Resources/Info.plist").read_text(encoding="utf-8"):
         raise AssertionError("Background mode declaration is missing")
 

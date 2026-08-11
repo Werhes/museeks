@@ -2,14 +2,16 @@ import Foundation
 import Security
 
 struct KeychainStore: Sendable {
-    enum Error: Swift.Error, LocalizedError {
-        case status(OSStatus)
+    enum KeychainError: LocalizedError {
+        case unexpectedStatus(OSStatus)
         case invalidData
 
         var errorDescription: String? {
             switch self {
-            case let .status(code): "Ошибка Keychain: \(code)"
-            case .invalidData: "Keychain содержит повреждённые данные."
+            case let .unexpectedStatus(status):
+                return "Keychain error: \(status)"
+            case .invalidData:
+                return "Keychain contains invalid data."
             }
         }
     }
@@ -20,41 +22,60 @@ struct KeychainStore: Sendable {
         self.service = service
     }
 
-    func save<Value: Encodable>(_ value: Value, account: String) throws {
+    func save<Value: Codable>(_ value: Value, account: String) throws {
         let data = try JSONEncoder().encode(value)
         let query = baseQuery(account: account)
-        let attributes: [String: Any] = [
+        let values: [String: Any] = [
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecAttrAccessible as String:
+            kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
 
-        let update = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if update == errSecSuccess { return }
-        guard update == errSecItemNotFound else { throw Error.status(update) }
+        let updateStatus = SecItemUpdate(
+            query as CFDictionary,
+            values as CFDictionary
+        )
+        if updateStatus == errSecSuccess {
+            return
+        }
+        guard updateStatus == errSecItemNotFound else {
+            throw KeychainError.unexpectedStatus(updateStatus)
+        }
 
-        var item = query
-        attributes.forEach { item[$0.key] = $0.value }
-        let add = SecItemAdd(item as CFDictionary, nil)
-        guard add == errSecSuccess else { throw Error.status(add) }
+        var newItem = query
+        values.forEach { newItem[$0.key] = $0.value }
+        let addStatus = SecItemAdd(newItem as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw KeychainError.unexpectedStatus(addStatus)
+        }
     }
 
-    func load<Value: Decodable>(_ type: Value.Type, account: String) throws -> Value? {
+    func load<Value: Codable>(
+        _ type: Value.Type,
+        account: String
+    ) throws -> Value? {
         var query = baseQuery(account: account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess else { throw Error.status(status) }
-        guard let data = result as? Data else { throw Error.invalidData }
+        if status == errSecItemNotFound {
+            return nil
+        }
+        guard status == errSecSuccess else {
+            throw KeychainError.unexpectedStatus(status)
+        }
+        guard let data = result as? Data else {
+            throw KeychainError.invalidData
+        }
         return try JSONDecoder().decode(type, from: data)
     }
 
     func delete(account: String) throws {
         let status = SecItemDelete(baseQuery(account: account) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw Error.status(status)
+            throw KeychainError.unexpectedStatus(status)
         }
     }
 
@@ -66,4 +87,3 @@ struct KeychainStore: Sendable {
         ]
     }
 }
-

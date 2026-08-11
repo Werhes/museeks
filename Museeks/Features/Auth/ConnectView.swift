@@ -2,75 +2,266 @@ import SwiftUI
 
 struct ConnectView: View {
     @EnvironmentObject private var environment: AppEnvironment
-    @State private var showsLogin = false
+    @EnvironmentObject private var sessionStore: SessionStore
+    @EnvironmentObject private var settings: AppSettings
+    @State private var token = ""
+    @State private var userAgent = ""
+    @State private var isConnecting = false
+    @State private var isWebLoginPresented = false
+    @State private var showsManualImport = false
+    @State private var errorMessage: String?
 
     var body: some View {
         ZStack {
-            AppBackground()
+            ThemeBackground()
+
             ScrollView {
-                VStack(spacing: 28) {
-                    Spacer(minLength: 50)
-                    icon
-                    VStack(spacing: 9) {
-                        Text("Museeks")
-                            .font(.system(size: 42, weight: .bold, design: .rounded))
-                        Text("Ваша музыка VK — в нативном плеере для iPhone")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    benefits
-                    PrimaryActionButton(
-                        title: "Продолжить с VK",
-                        systemImage: "person.crop.circle.badge.checkmark"
-                    ) { showsLogin = true }
-                    privacy
-                    Spacer(minLength: 30)
+                VStack(spacing: 24) {
+                    Spacer(minLength: 28)
+                    brandHeader
+                    loginCard
+                    privacyNote
+                    manualImport
+                    Spacer(minLength: 24)
                 }
-                .padding(.horizontal, 22)
+                .frame(maxWidth: 520)
+                .padding(.horizontal, 20)
+                .frame(maxWidth: .infinity)
             }
         }
-        .sheet(isPresented: $showsLogin) { VKWebLoginView() }
-    }
-
-    private var icon: some View {
-        Image("AppIconPreview")
-            .resizable()
-            .scaledToFit()
-            .frame(width: 126, height: 126)
-            .clipShape(RoundedRectangle(cornerRadius: 29, style: .continuous))
-            .shadow(color: MuseeksPalette.accent.opacity(0.35), radius: 28, y: 12)
-            .accessibilityHidden(true)
-    }
-
-    private var benefits: some View {
-        VStack(alignment: .leading, spacing: 15) {
-            benefit("sparkles", "Персональные рекомендации и миксы")
-            benefit("magnifyingglass", "Поиск по музыке VK")
-            benefit("waveform", "Фоновое воспроизведение и AirPlay")
-            benefit("lock.shield", "Токен хранится только в Keychain")
+        .alert(
+            "Не удалось подключить",
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )
+        ) {
+            Button("ОК", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .sheet(isPresented: $isWebLoginPresented) {
+            VKWebLoginView { result in
+                Task { await connectWebSession(result) }
+            }
+        }
+    }
+
+    private var brandHeader: some View {
+        VStack(spacing: 14) {
+            Image("AppIconPreview")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 92, height: 92)
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: PremiumLayout.cardRadius,
+                        style: .continuous
+                    )
+                )
+                .shadow(color: .black.opacity(0.12), radius: 20, y: 10)
+
+            VStack(spacing: 5) {
+                Text("Museeks")
+                    .font(.system(size: 34, weight: .bold))
+                Text("Музыка из вашей медиатеки VK в одном плеере")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+
+    private var loginCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Подключите VK")
+                    .font(.title3.bold())
+                Text(
+                    "Вход откроется на официальной странице VK."
+                )
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                benefit("phone.fill", "Вход по номеру телефона")
+                benefit("lock.shield.fill", "Пароль остаётся на стороне VK")
+                benefit(
+                    "key.fill",
+                    "Данные сессии хранятся в системном Keychain"
+                )
+            }
+
+            Button {
+                isWebLoginPresented = true
+            } label: {
+                HStack {
+                    if isConnecting {
+                        ProgressView().tint(.white)
+                    } else {
+                        Image(systemName: "person.crop.circle.badge.checkmark")
+                    }
+                    Text(
+                        L10n.text(
+                            isConnecting
+                                ? "Подключаем аккаунт…"
+                                : "Продолжить с VK"
+                        )
+                    )
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(isConnecting)
+        }
         .padding(20)
-        .museeksGlass(
-            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+        .premiumCard(interactive: true)
+    }
+
+    private func benefit(_ icon: String, _ title: String) -> some View {
+        Label {
+            Text(L10n.text(title))
+                .font(.subheadline)
+        } icon: {
+            Image(systemName: icon)
+                .foregroundStyle(settings.theme.accent)
+                .frame(width: 22)
+        }
+    }
+
+    private var privacyNote: some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: "checkmark.shield")
+                .foregroundStyle(.green)
+            Text(
+                L10n.text(
+                    "Museeks не читает поля формы входа и не отправляет "
+                        + "пароль или код подтверждения на собственный сервер. "
+                        + "Полученные данные сессии сохраняются в системном "
+                        + "Keychain этого устройства."
+                )
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 8)
+    }
+
+    private var manualImport: some View {
+        DisclosureGroup(
+            "Есть готовая сессия?",
+            isExpanded: $showsManualImport
+        ) {
+            VStack(spacing: 12) {
+                SecureField("VK access token", text: $token)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textContentType(.password)
+                    .padding()
+                    .background(
+                        Color(uiColor: .tertiarySystemFill),
+                        in: RoundedRectangle(
+                            cornerRadius: PremiumLayout.controlRadius,
+                            style: .continuous
+                        )
+                    )
+
+                TextField("User-Agent из VKpyMusic", text: $userAgent)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding()
+                    .background(
+                        Color(uiColor: .tertiarySystemFill),
+                        in: RoundedRectangle(
+                            cornerRadius: PremiumLayout.controlRadius,
+                            style: .continuous
+                        )
+                    )
+
+                Button {
+                    Task { await connectImportedSession() }
+                } label: {
+                    Label(
+                        "Импортировать",
+                        systemImage: "square.and.arrow.down"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(
+                    isConnecting
+                        || token.count < 16
+                        || userAgent.count < 12
+                )
+            }
+            .padding(.top, 14)
+        }
+        .font(.subheadline)
+        .padding(16)
+        .background(
+            Color(uiColor: .secondarySystemBackground),
+            in: RoundedRectangle(
+                cornerRadius: PremiumLayout.compactRadius,
+                style: .continuous
+            )
         )
     }
 
-    private func benefit(_ icon: String, _ text: String) -> some View {
-        Label(text, systemImage: icon)
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(.primary)
+    @MainActor
+    private func connectImportedSession() async {
+        let cleaned = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedUserAgent = userAgent.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard cleaned.count >= 16, cleanedUserAgent.count >= 12 else {
+            errorMessage = APIError.unauthorized.localizedDescription
+            return
+        }
+        isConnecting = true
+        defer { isConnecting = false }
+        do {
+            await environment.musicService.configure(
+                userAgent: cleanedUserAgent
+            )
+            environment.player.configureNetwork(
+                userAgent: cleanedUserAgent
+            )
+            let profile = try await environment.musicService.profile(
+                accessToken: cleaned
+            )
+            try sessionStore.connect(
+                accessToken: cleaned,
+                userAgent: cleanedUserAgent,
+                profile: profile
+            )
+            token = ""
+            userAgent = ""
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
-    private var privacy: some View {
-        Label {
-            Text("Museeks не видит и не сохраняет пароль или код подтверждения. Вход выполняется на странице VK.")
-        } icon: {
-            Image(systemName: "checkmark.shield.fill").foregroundStyle(.green)
+    @MainActor
+    private func connectWebSession(_ result: VKWebAuthResult) async {
+        isConnecting = true
+        defer { isConnecting = false }
+        do {
+            await environment.musicService.configure(
+                userAgent: result.apiUserAgent
+            )
+            environment.player.configureNetwork(
+                userAgent: result.apiUserAgent
+            )
+            let profile = try await environment.musicService.profile(
+                accessToken: result.accessToken
+            )
+            try sessionStore.updateWebSession(
+                result,
+                profile: profile
+            )
+        } catch {
+            errorMessage = error.localizedDescription
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
     }
 }
-
