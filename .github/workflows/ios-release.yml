@@ -1,0 +1,238 @@
+name: iOS Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Версия релиза, например 1.2.0; пусто — MARKETING_VERSION из project.yml"
+        required: false
+        type: string
+      create_release:
+        description: "Создать GitHub Release после сборки"
+        required: true
+        default: true
+        type: boolean
+      prerelease:
+        description: "Пометить релиз как предварительный"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Test and build unsigned IPA
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show build environment
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Validate and generate Xcode project
+        run: |
+          python3 scripts/validate_project.py
+          xcodegen generate
+          xcodebuild -project Museeks.xcodeproj -scheme Museeks -list
+
+      - name: Resolve build version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          project_version="$(awk '/MARKETING_VERSION:/ {gsub(/"/, "", $2); print $2; exit}' project.yml)"
+
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+            app_version="${GITHUB_REF_NAME#v}"
+          elif [[ -n "${REQUESTED_VERSION:-}" ]]; then
+            app_version="${REQUESTED_VERSION#v}"
+          else
+            app_version="$project_version"
+          fi
+
+          if [[ ! "$app_version" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
+            echo "Invalid release version: $app_version" >&2
+            exit 1
+          fi
+
+          marketing_version="${app_version%%-*}"
+          if [[ ! "$marketing_version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+            marketing_version="$project_version"
+          fi
+
+          echo "APP_VERSION=$app_version" >> "$GITHUB_ENV"
+          echo "MARKETING_VERSION=$marketing_version" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          echo "Building Museeks $app_version ($GITHUB_RUN_NUMBER)"
+
+      - name: Run unit tests
+        run: |
+          simulator_id="$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          print(next(
+              device["udid"]
+              for devices in data["devices"].values()
+              for device in devices
+              if device.get("isAvailable") and device.get("name", "").startswith("iPhone")
+          ))
+          ')"
+
+          xcodebuild test \
+            -project Museeks.xcodeproj \
+            -scheme Museeks \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$simulator_id" \
+            -derivedDataPath build/TestDerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION="$MARKETING_VERSION" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+
+      - name: Build application for iPhone
+        run: |
+          xcodebuild clean build \
+            -project Museeks.xcodeproj \
+            -scheme Museeks \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            MARKETING_VERSION="$MARKETING_VERSION" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+
+      - name: Package unsigned IPA
+        run: |
+          app_path="build/DerivedData/Build/Products/Release-iphoneos/Museeks.app"
+          if [[ ! -d "$app_path" ]]; then
+            echo "Museeks.app was not produced at $app_path" >&2
+            find build/DerivedData/Build/Products -maxdepth 3 -type d -name "*.app" -print
+            exit 1
+          fi
+
+          package_root="$RUNNER_TEMP/museeks-package"
+          mkdir -p "$package_root/Payload" "$GITHUB_WORKSPACE/dist"
+          ditto "$app_path" "$package_root/Payload/Museeks.app"
+
+          ipa_name="Museeks-${APP_VERSION}-${BUILD_NUMBER}-unsigned.ipa"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$package_root/Payload" \
+            "$GITHUB_WORKSPACE/dist/$ipa_name"
+
+          cd "$GITHUB_WORKSPACE/dist"
+          shasum -a 256 "$ipa_name" > "$ipa_name.sha256"
+          ls -lh "$ipa_name" "$ipa_name.sha256"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Museeks-${{ env.APP_VERSION }}-${{ env.BUILD_NUMBER }}-unsigned
+          path: |
+            dist/*.ipa
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Create private GitHub Release
+    needs: build
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.create_release)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+
+    steps:
+      - name: Checkout release metadata
+        uses: actions/checkout@v4
+
+      - name: Download IPA artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Museeks-*-unsigned
+          path: release-assets
+          merge-multiple: true
+
+      - name: Resolve release metadata
+        id: release_meta
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+          REQUESTED_PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            version="${REQUESTED_VERSION:-}"
+            if [[ -z "$version" ]]; then
+              version="$(awk '/MARKETING_VERSION:/ {gsub(/"/, "", $2); print $2; exit}' project.yml)"
+            fi
+            version="${version#v}"
+            tag="v$version"
+          fi
+
+          prerelease="${REQUESTED_PRERELEASE:-false}"
+          if [[ "$tag" == *-* ]]; then
+            prerelease="true"
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "Release tag: $tag; prerelease: $prerelease"
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
+          IS_PRERELEASE: ${{ steps.release_meta.outputs.prerelease }}
+        run: |
+          mapfile -t assets < <(find release-assets -maxdepth 1 -type f \( -name "*.ipa" -o -name "*.sha256" \) -print | sort)
+          if [[ ${#assets[@]} -eq 0 ]]; then
+            echo "No release assets were downloaded" >&2
+            exit 1
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+            exit 0
+          fi
+
+          args=(
+            release create "$RELEASE_TAG"
+            "${assets[@]}"
+            --target "$GITHUB_SHA"
+            --title "Museeks $RELEASE_TAG"
+            --generate-notes
+          )
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            args+=(--prerelease --latest=false)
+          else
+            args+=(--latest)
+          fi
+          gh "${args[@]}"

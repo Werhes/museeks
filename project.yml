@@ -1,0 +1,46 @@
+name: Museeks
+options:
+  bundleIdPrefix: com.werhes
+  minimumXcodeGenVersion: 2.44.0
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    SWIFT_STRICT_CONCURRENCY: targeted
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 1.0.0
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+targets:
+  Museeks:
+    type: application
+    platform: iOS
+    sources:
+      - path: Museeks
+        excludes:
+          - Resources/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.werhes.museeks
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Museeks/Resources/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+    scheme:
+      testTargets:
+        - MuseeksTests
+  MuseeksTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - MuseeksTests
+    dependencies:
+      - target: Museeks
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.werhes.museeks.tests
+        GENERATE_INFOPLIST_FILE: YES
+
