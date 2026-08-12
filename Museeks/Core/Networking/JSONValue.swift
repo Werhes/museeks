@@ -322,11 +322,18 @@ enum JSONValue: Codable, Sendable {
                     ?? streamMix?["title"]?.stringValue
                     ?? object["name"]?.stringValue
                     ?? L10n.text("VK Микс")
-                let subtitle = object["subtitle"]?.stringValue
-                    ?? object["description"]?.stringValue
-                    ?? streamMix?["description"]?.stringValue
-                    ?? object["caption"]?.stringValue
-                    ?? L10n.text("Персональная подборка VK")
+                var subtitle: String?
+                if let s = object["subtitle"]?.stringValue {
+                    subtitle = s
+                } else if let s = object["description"]?.stringValue {
+                    subtitle = s
+                } else if let s = streamMix?["description"]?.stringValue {
+                    subtitle = s
+                } else if let s = object["caption"]?.stringValue {
+                    subtitle = s
+                } else {
+                    subtitle = L10n.text("Персональная подборка VK")
+                }
                 let matchPercent = object.mixMatchPercent
                 let curator = object.mixCurator
                 let social = object.looksLikeSocialMix(
@@ -476,7 +483,7 @@ enum JSONValue: Codable, Sendable {
     }
 }
 
-private extension Dictionary where Key == String, Value == JSONValue {
+extension Dictionary where Key == String, Value == JSONValue {
     var mixReferencedIDs: [String] {
         guard case let .array(values)? = self["audio_stream_mixes_ids"] else {
             return []
@@ -638,7 +645,7 @@ private extension Dictionary where Key == String, Value == JSONValue {
         return nil
     }
 
-    private func objectValue(_ key: String) -> [String: JSONValue]? {
+    fileprivate func objectValue(_ key: String) -> [String: JSONValue]? {
         if case let .object(value)? = self[key] {
             return value
         }
@@ -651,7 +658,12 @@ private extension Dictionary where Key == String, Value == JSONValue {
             return []
         }
         let rawIDs = values.compactMap(\.stringValue)
-        let byID = Dictionary(audios.map { ($0.id, $0) }, uniquingKeysWith: { lhs, _ in lhs })
+        var byID: [String: Track] = [:]
+        for track in audios {
+            if byID[track.id] == nil {
+                byID[track.id] = track
+            }
+        }
         var seen = Set<String>()
         return rawIDs.compactMap { byID[$0] }.filter {
             seen.insert($0.id).inserted
@@ -665,10 +677,13 @@ private extension Dictionary where Key == String, Value == JSONValue {
             return []
         }
         let rawIDs = values.compactMap(\.stringValue)
-        let byID = Dictionary(
-            playlists.map { ("\($0.ownerID)_\($0.id)", $0) },
-            uniquingKeysWith: { lhs, _ in lhs }
-        )
+        var byID: [String: Playlist] = [:]
+        for playlist in playlists {
+            let key = "\(playlist.ownerID)_\(playlist.id)"
+            if byID[key] == nil {
+                byID[key] = playlist
+            }
+        }
         var seen = Set<String>()
         return rawIDs.compactMap { byID[$0] }.filter {
             seen.insert("\($0.ownerID)_\($0.id)").inserted
