@@ -322,7 +322,7 @@ enum JSONValue: Codable, Sendable {
                     ?? streamMix?["title"]?.stringValue
                     ?? object["name"]?.stringValue
                     ?? L10n.text("VK Микс")
-                var subtitle: String?
+                var subtitle = L10n.text("Персональная подборка VK")
                 if let s = object["subtitle"]?.stringValue {
                     subtitle = s
                 } else if let s = object["description"]?.stringValue {
@@ -331,8 +331,6 @@ enum JSONValue: Codable, Sendable {
                     subtitle = s
                 } else if let s = object["caption"]?.stringValue {
                     subtitle = s
-                } else {
-                    subtitle = L10n.text("Персональная подборка VK")
                 }
                 let matchPercent = object.mixMatchPercent
                 let curator = object.mixCurator
