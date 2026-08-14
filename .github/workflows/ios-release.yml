@@ -23,7 +23,7 @@ on:
       prerelease:
         description: "Пометить релиз как предварительный"
         required: true
-        default: false
+        default: true
         type: boolean
 
 permissions:
@@ -126,6 +126,7 @@ jobs:
       # release tag is derived and updated in place, not duplicated.
       - name: Create or update GitHub release
         if: github.event_name != 'pull_request'
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_VERSION: ${{ inputs.version }}
@@ -147,7 +148,12 @@ jobs:
             prerelease="true"
           fi
 
-          mapfile -t assets < <(find dist -maxdepth 1 -type f \( -name "*.ipa" -o -name "*.sha256" \) -print | sort)
+          # macOS ships bash 3.2 which has no `mapfile`; build the array with a
+          # portable read loop instead.
+          assets=()
+          while IFS= read -r f; do
+            assets+=("$f")
+          done < <(find dist -maxdepth 1 -type f \( -name "*.ipa" -o -name "*.sha256" \) -print | sort)
           if [[ ${#assets[@]} -eq 0 ]]; then
             echo "::warning::No IPA found in dist/; creating release without assets."
           else
