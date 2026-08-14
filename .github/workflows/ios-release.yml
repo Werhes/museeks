@@ -38,6 +38,8 @@ jobs:
     name: Build unsigned IPA
     runs-on: macos-26
     timeout-minutes: 30
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -117,51 +119,16 @@ jobs:
           shasum -a 256 "$ipa_name" > "$ipa_name.sha256"
           ls -lh "$ipa_name" "$ipa_name.sha256"
 
-      # The artifact is only a staging step for the release job. If the shared
-      # Actions artifact store is full (or otherwise unavailable), never fail
-      # the build — otherwise `needs: build` would skip the release entirely.
-      # The release job is prepared to publish without the IPA in that case.
-      - name: Upload IPA artifact
-        uses: actions/upload-artifact@v4
-        continue-on-error: true
-        with:
-          name: Museeks-${{ env.APP_VERSION }}-${{ env.BUILD_NUMBER }}-unsigned
-          path: |
-            dist/*.ipa
-            dist/*.sha256
-          if-no-files-found: error
-          retention-days: 14
-
-  release:
-    name: Create private GitHub Release
-    needs: build
-    # Never skip the release on the normal flows (tag push, push to main,
-    # workflow_dispatch). Only pull requests skip publishing. The
-    # `create_release` dispatch input remains a manual override for
-    # workflow_dispatch runs; when it is explicitly false the job is skipped.
-    if: >-
-      github.event_name != 'pull_request' &&
-      (github.event_name != 'workflow_dispatch' || inputs.create_release)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      actions: read
-      contents: write
-
-    steps:
-      - name: Checkout release metadata
-        uses: actions/checkout@v4
-
-      - name: Download IPA artifact
-        uses: actions/download-artifact@v4
-        with:
-          pattern: Museeks-*-unsigned
-          path: release-assets
-          merge-multiple: true
-
-      - name: Resolve release metadata
-        id: release_meta
+      # Create the release directly from the packaged IPA in this job's build
+      # folder — no GitHub Actions artifact staging, so a full artifact store
+      # can never block publishing. Runs on tag pushes and workflow_dispatch;
+      # plain `push` to main only builds/packages without cutting a release.
+      - name: Create or update GitHub release
+        if: >-
+          startsWith(github.ref, 'refs/tags/v') ||
+          (github.event_name == 'workflow_dispatch' && inputs.create_release)
         env:
+          GH_TOKEN: ${{ github.token }}
           REQUESTED_VERSION: ${{ inputs.version }}
           REQUESTED_PRERELEASE: ${{ inputs.prerelease }}
         run: |
@@ -170,7 +137,7 @@ jobs:
           else
             version="${REQUESTED_VERSION:-}"
             if [[ -z "$version" ]]; then
-              version="$(awk '/MARKETING_VERSION:/ {gsub(/"/, "", $2); print $2; exit}' project.yml)"
+              version="$APP_VERSION"
             fi
             version="${version#v}"
             tag="v$version"
@@ -181,43 +148,30 @@ jobs:
             prerelease="true"
           fi
 
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
-          echo "Release tag: $tag; prerelease: $prerelease"
-
-      - name: Create or update release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
-          IS_PRERELEASE: ${{ steps.release_meta.outputs.prerelease }}
-        run: |
-          mapfile -t assets < <(find release-assets -maxdepth 1 -type f \( -name "*.ipa" -o -name "*.sha256" \) -print | sort)
+          mapfile -t assets < <(find dist -maxdepth 1 -type f \( -name "*.ipa" -o -name "*.sha256" \) -print | sort)
           if [[ ${#assets[@]} -eq 0 ]]; then
-            # Artifact upload may have hit the shared quota; still publish the
-            # release so the tag/notes are not lost. The IPA can be attached
-            # later from a local build once storage frees up.
-            echo "::warning::No release assets were downloaded; creating release without IPA."
+            echo "::warning::No IPA found in dist/; creating release without assets."
           else
             echo "Attaching ${#assets[@]} release asset(s)"
           fi
 
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+          if gh release view "$tag" >/dev/null 2>&1; then
             if [[ ${#assets[@]} -gt 0 ]]; then
-              gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+              gh release upload "$tag" "${assets[@]}" --clobber
             fi
             exit 0
           fi
 
           args=(
-            release create "$RELEASE_TAG"
+            release create "$tag"
             --target "$GITHUB_SHA"
-            --title "Museeks $RELEASE_TAG"
+            --title "Museeks $tag"
             --generate-notes
           )
           if [[ ${#assets[@]} -gt 0 ]]; then
             args+=( "${assets[@]}" )
           fi
-          if [[ "$IS_PRERELEASE" == "true" ]]; then
+          if [[ "$prerelease" == "true" ]]; then
             args+=(--prerelease --latest=false)
           else
             args+=(--latest)
