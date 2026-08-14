@@ -117,8 +117,13 @@ jobs:
           shasum -a 256 "$ipa_name" > "$ipa_name.sha256"
           ls -lh "$ipa_name" "$ipa_name.sha256"
 
+      # The artifact is only a staging step for the release job. If the shared
+      # Actions artifact store is full (or otherwise unavailable), never fail
+      # the build — otherwise `needs: build` would skip the release entirely.
+      # The release job is prepared to publish without the IPA in that case.
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: Museeks-${{ env.APP_VERSION }}-${{ env.BUILD_NUMBER }}-unsigned
           path: |
@@ -184,22 +189,30 @@ jobs:
         run: |
           mapfile -t assets < <(find release-assets -maxdepth 1 -type f \( -name "*.ipa" -o -name "*.sha256" \) -print | sort)
           if [[ ${#assets[@]} -eq 0 ]]; then
-            echo "No release assets were downloaded" >&2
-            exit 1
+            # Artifact upload may have hit the shared quota; still publish the
+            # release so the tag/notes are not lost. The IPA can be attached
+            # later from a local build once storage frees up.
+            echo "::warning::No release assets were downloaded; creating release without IPA."
+          else
+            echo "Attaching ${#assets[@]} release asset(s)"
           fi
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+            if [[ ${#assets[@]} -gt 0 ]]; then
+              gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+            fi
             exit 0
           fi
 
           args=(
             release create "$RELEASE_TAG"
-            "${assets[@]}"
             --target "$GITHUB_SHA"
             --title "Museeks $RELEASE_TAG"
             --generate-notes
           )
+          if [[ ${#assets[@]} -gt 0 ]]; then
+            args+=( "${assets[@]}" )
+          fi
           if [[ "$IS_PRERELEASE" == "true" ]]; then
             args+=(--prerelease --latest=false)
           else
