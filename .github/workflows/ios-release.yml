@@ -121,12 +121,11 @@ jobs:
 
       # Create the release directly from the packaged IPA in this job's build
       # folder — no GitHub Actions artifact staging, so a full artifact store
-      # can never block publishing. Runs on tag pushes and workflow_dispatch;
-      # plain `push` to main only builds/packages without cutting a release.
+      # can never block publishing. Runs on every non-PR event (tag push,
+      # push to main, workflow_dispatch) so the step is never skipped; the
+      # release tag is derived and updated in place, not duplicated.
       - name: Create or update GitHub release
-        if: >-
-          startsWith(github.ref, 'refs/tags/v') ||
-          (github.event_name == 'workflow_dispatch' && inputs.create_release)
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_VERSION: ${{ inputs.version }}
