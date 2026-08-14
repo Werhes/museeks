@@ -96,6 +96,22 @@ private actor YandexHTTPClient {
         )
     }
 
+    /// Discards the JSON payload when the caller only cares about the HTTP
+    /// result. Yandex wraps successful responses; an empty body is accepted.
+    func postVoid(
+        path: String,
+        token: String,
+        body: [String: Any] = [:]
+    ) async throws {
+        let _: EmptyDTO = try await request(
+            method: "POST",
+            path: path,
+            token: token,
+            query: [:],
+            body: body
+        )
+    }
+
     private func request<Response: Decodable>(
         method: String,
         path: String,
@@ -186,6 +202,9 @@ private actor YandexHTTPClient {
 private struct YandexEnvelope: Decodable {
     let error: Int?
 }
+
+/// Response type for mutations whose payload is ignored.
+private struct EmptyDTO: Decodable {}
 
 // MARK: - Yandex DTOs (decoded subset of the API)
 
@@ -384,7 +403,7 @@ struct YandexAlbumDTO: Decodable, Sendable {
             ),
             accessKey: nil,
             artists: (artists ?? []).map(\.name),
-            releaseDate: year.map {
+            releaseDate: year.flatMap {
                 Calendar.current.date(
                     from: DateComponents(year: $0)
                 )
@@ -733,7 +752,7 @@ struct YandexMusicService: MusicService {
             path: "landing/releases",
             token: accessToken
         )
-        return releases.albums.map(\.toAlbum)
+        return releases.albums.map { $0.toAlbum() }
     }
 
     func mixSettings(
@@ -837,7 +856,7 @@ struct YandexMusicService: MusicService {
         )
         let albums = result.searchResult?.albums?.results ?? []
         return MusicPage(
-            items: albums.map(\.toAlbum),
+            items: albums.map { $0.toAlbum() },
             totalCount: albums.count,
             nextOffset: nil
         )
@@ -860,7 +879,7 @@ struct YandexMusicService: MusicService {
         )
         let albums = result.likes?.map(\.album) ?? []
         return MusicPage(
-            items: albums.map(\.toAlbum),
+            items: albums.map { $0.toAlbum() },
             totalCount: albums.count,
             nextOffset: nil
         )
@@ -879,7 +898,7 @@ struct YandexMusicService: MusicService {
             path: "albums/\(album.albumID)/with-tracks",
             token: accessToken
         )
-        let tracks = (result.volumes ?? []).flatMap { $0 }.compactMap(\.toTrack)
+        let tracks = (result.volumes ?? []).flatMap { $0 }.compactMap { $0.toTrack() }
         return MusicPage(
             items: tracks,
             totalCount: tracks.count,
@@ -899,7 +918,7 @@ struct YandexMusicService: MusicService {
         follow: Bool,
         accessToken: String
     ) async throws {
-        _ = try await client.post(
+        try await client.postVoid(
             path: follow
                 ? "users/me/likes/albums/add-multiple"
                 : "users/me/likes/albums/remove",
@@ -978,7 +997,7 @@ struct YandexMusicService: MusicService {
             path: "users/\(playlist.ownerID)/playlists/\(playlist.id)",
             token: accessToken
         )
-        let tracks = (dto.tracks ?? []).compactMap(\.toTrack)
+        let tracks = (dto.tracks ?? []).compactMap { $0.toTrack() }
         return MusicPage(
             items: tracks,
             totalCount: tracks.count,
@@ -990,7 +1009,7 @@ struct YandexMusicService: MusicService {
         _ track: Track,
         accessToken: String
     ) async throws -> Track {
-        _ = try await client.post(
+        try await client.postVoid(
             path: "users/me/likes/tracks/add-multiple",
             token: accessToken,
             body: ["track-ids": [yandexTrackID(track)]]
@@ -1002,7 +1021,7 @@ struct YandexMusicService: MusicService {
         _ track: Track,
         accessToken: String
     ) async throws {
-        _ = try await client.post(
+        try await client.postVoid(
             path: "users/me/likes/tracks/remove",
             token: accessToken,
             body: ["track-ids": [yandexTrackID(track)]]
@@ -1013,7 +1032,7 @@ struct YandexMusicService: MusicService {
         _ track: Track,
         accessToken: String
     ) async throws {
-        _ = try await client.post(
+        try await client.postVoid(
             path: "users/me/dislikes/tracks/add-multiple",
             token: accessToken,
             body: ["track-ids": [yandexTrackID(track)]]
@@ -1040,7 +1059,7 @@ struct YandexMusicService: MusicService {
                 source: "Яндекс Музыка"
             )
         }
-        return Lyrics(text: "", source: nil)
+        return Lyrics(text: "", source: "")
     }
 
     func createPlaylist(
@@ -1074,7 +1093,7 @@ struct YandexMusicService: MusicService {
         description: String,
         accessToken: String
     ) async throws {
-        _ = try await client.post(
+        try await client.postVoid(
             path: "users/\(playlist.ownerID)/playlists/\(playlist.id)/name",
             token: accessToken,
             body: ["value": title]
@@ -1085,7 +1104,7 @@ struct YandexMusicService: MusicService {
         _ playlist: Playlist,
         accessToken: String
     ) async throws {
-        _ = try await client.post(
+        try await client.postVoid(
             path: "users/\(playlist.ownerID)/playlists/\(playlist.id)/delete",
             token: accessToken
         )
@@ -1096,7 +1115,7 @@ struct YandexMusicService: MusicService {
         to playlist: Playlist,
         accessToken: String
     ) async throws {
-        _ = try await client.post(
+        try await client.postVoid(
             path: "users/\(playlist.ownerID)/playlists/\(playlist.id)/change-relative",
             token: accessToken,
             body: [
@@ -1116,7 +1135,7 @@ struct YandexMusicService: MusicService {
         from playlist: Playlist,
         accessToken: String
     ) async throws {
-        _ = try await client.post(
+        try await client.postVoid(
             path: "users/\(playlist.ownerID)/playlists/\(playlist.id)/change-relative",
             token: accessToken,
             body: [
@@ -1278,7 +1297,7 @@ struct YandexMusicService: MusicService {
                 ["name": "energy", "values": Array(settings.energy)]
             ]
         ]
-        _ = try await client.post(
+        try await client.postVoid(
             path: "rotor/station/user:onyourwave/settings2",
             token: accessToken,
             body: payload
@@ -1308,7 +1327,7 @@ struct YandexMusicService: MusicService {
             token: accessToken,
             query: ["trackIds": ids, "with-positions": "true"]
         )
-        let tracks = batch.tracks.compactMap(\.toTrack)
+        let tracks = batch.tracks.compactMap { $0.toTrack() }
         return MusicPage(
             items: tracks,
             totalCount: tracks.count,
@@ -1332,7 +1351,7 @@ struct YandexMusicService: MusicService {
             token: accessToken,
             query: ["trackIds": ids, "with-positions": "true"]
         )
-        let tracks = batch.tracks.compactMap(\.toTrack)
+        let tracks = batch.tracks.compactMap { $0.toTrack() }
         return MusicPage(
             items: tracks,
             totalCount: tracks.count,

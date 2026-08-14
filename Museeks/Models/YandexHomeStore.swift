@@ -28,58 +28,57 @@ final class YandexHomeStore: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        guard let yandex = service as? YandexMusicService,
-              let accessTokenProvider else {
+        guard let yandex = service as? YandexMusicService else { return }
+        // Resolve the token once up front; YandexMusicService is Sendable so
+        // passing the plain String into the parallel requests avoids any
+        // non-Sendable closure captures.
+        let token: String
+        if let accessTokenProvider {
+            guard let resolved = try? await accessTokenProvider() else {
+                return
+            }
+            token = resolved
+        } else {
             return
         }
-        do {
-            async let wave: [Track] = {
-                (try? await yandex.waveTracks(
-                    accessToken: accessTokenProvider()
-                )) ?? []
-            }()
-            async let liked: [Track] = {
-                (try? await yandex.library(
-                    accessToken: accessTokenProvider(),
-                    offset: 0,
-                    count: 50
-                ).items) ?? []
-            }()
-            async let playlists: [Playlist] = {
-                (try? await yandex.playlists(
-                    accessToken: accessTokenProvider(),
-                    offset: 0,
-                    count: 20
-                ).items) ?? []
-            }()
-            async let likedAlbums: [Album] = {
-                (try? await yandex.likedAlbums(
-                    accessToken: accessTokenProvider(),
-                    offset: 0,
-                    count: 20
-                ).items) ?? []
-            }()
-            async let landing: [YandexLandingBlock] = {
-                (try? await yandex.landingBlocks(
-                    accessToken: accessTokenProvider()
-                )) ?? []
-            }()
-            async let releases: [Album] = {
-                (try? await yandex.newReleases(
-                    accessToken: accessTokenProvider()
-                )) ?? []
-            }()
+        async let wave: [Track] = {
+            (try? await yandex.waveTracks(accessToken: token)) ?? []
+        }()
+        async let liked: [Track] = {
+            (try? await yandex.library(
+                accessToken: token,
+                offset: 0,
+                count: 50
+            ).items) ?? []
+        }()
+        async let playlistsResult: [Playlist] = {
+            (try? await yandex.playlists(
+                accessToken: token,
+                offset: 0,
+                count: 20
+            ).items) ?? []
+        }()
+        async let likedAlbumsResult: [Album] = {
+            (try? await yandex.likedAlbums(
+                accessToken: token,
+                offset: 0,
+                count: 20
+            ).items) ?? []
+        }()
+        async let landing: [YandexLandingBlock] = {
+            (try? await yandex.landingBlocks(accessToken: token)) ?? []
+        }()
+        async let releases: [Album] = {
+            (try? await yandex.newReleases(accessToken: token)) ?? []
+        }()
 
-            waveTracks = await wave
-            likedTracks = await liked
-            playlists = await playlists
-            likedAlbums = await likedAlbums
-            landingBlocks = await landing
-            newReleases = await releases
-            errorMessage = nil
-            hasLoaded = true
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        waveTracks = await wave
+        likedTracks = await liked
+        playlists = await playlistsResult
+        likedAlbums = await likedAlbumsResult
+        landingBlocks = await landing
+        newReleases = await releases
+        errorMessage = nil
+        hasLoaded = true
     }
 }

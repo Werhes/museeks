@@ -650,8 +650,8 @@ struct YandexSearchView: View {
     }
 
     private func search() async {
-        guard !query.isEmpty,
-              let yandex = environment.yandexService else { return }
+        guard !query.isEmpty else { return }
+        let yandex = environment.yandexService
         isSearching = true
         defer { isSearching = false }
         do {
@@ -999,10 +999,7 @@ struct YandexWaveSettingsView: View {
     }
 
     private func load() async {
-        guard let yandex = environment.yandexService else {
-            isLoading = false
-            return
-        }
+        let yandex = environment.yandexService
         do {
             settings = try await environment.withYandexToken { token in
                 try await yandex.waveSettings(accessToken: token)
@@ -1013,7 +1010,7 @@ struct YandexWaveSettingsView: View {
 
     private func apply() {
         Task {
-            guard let yandex = environment.yandexService else { return }
+            let yandex = environment.yandexService
             do {
                 try await environment.withYandexToken { token in
                     try await yandex.setWaveSettings(settings, accessToken: token)
