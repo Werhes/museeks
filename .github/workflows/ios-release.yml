@@ -135,9 +135,13 @@ jobs:
   release:
     name: Create private GitHub Release
     needs: build
+    # Never skip the release on the normal flows (tag push, push to main,
+    # workflow_dispatch). Only pull requests skip publishing. The
+    # `create_release` dispatch input remains a manual override for
+    # workflow_dispatch runs; when it is explicitly false the job is skipped.
     if: >-
-      startsWith(github.ref, 'refs/tags/v') ||
-      (github.event_name == 'workflow_dispatch' && inputs.create_release)
+      github.event_name != 'pull_request' &&
+      (github.event_name != 'workflow_dispatch' || inputs.create_release)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
