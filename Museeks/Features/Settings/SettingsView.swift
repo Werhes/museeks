@@ -105,6 +105,14 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("Музыкальный сервис") {
+                Picker("Сервис", selection: $settings.musicService) {
+                    ForEach(MusicServiceKind.allCases) { service in
+                        Text(service.title).tag(service)
+                    }
+                }
+            }
+
             Section {
                 NavigationLink {
                     AppearanceSettingsView()

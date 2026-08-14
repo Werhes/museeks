@@ -18,6 +18,8 @@ final class AppEnvironment: ObservableObject {
     let player: AudioPlayer
     let watchRemoteCoordinator: WatchRemoteCoordinator
     let musicService: any MusicService
+    let yandexService = YandexMusicService()
+    let yandexHomeStore = YandexHomeStore()
     let webAuthService: VKWebAuthService
     @Published private(set) var isRecoveringSession = false
     /// While a share export is active, offline downloads and automatic
@@ -407,6 +409,22 @@ final class AppEnvironment: ObservableObject {
         )
     }
 
+    func refreshYandexHome(force: Bool = false) async {
+        await yandexHomeStore.load(
+            force: force,
+            service: yandexService,
+            accessTokenProvider: { [weak self] in
+                guard let self else { throw CancellationError() }
+                let token = self.settings.yandexToken
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !token.isEmpty else {
+                    throw CancellationError()
+                }
+                return token
+            }
+        )
+    }
+
     func refreshOverviewCatalog(force: Bool = false) async {
         overviewCatalogStore.prepare(
             accountID: sessionStore.resolvedOfflineAccountID
@@ -666,6 +684,21 @@ final class AppEnvironment: ObservableObject {
         // A web exchange may legitimately return the same token with refreshed
         // cookies. The rejected operation still gets one clean retry.
         return try await operation(refreshedToken)
+    }
+
+    /// Runs an operation against the Yandex Music API using the Yandex OAuth
+    /// token stored in settings (separate from the VK session token).
+    func withYandexToken<Value>(
+        _ operation: (String) async throws -> Value
+    ) async throws -> Value {
+        try Task.checkCancellation()
+        let token = settings.yandexToken.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !token.isEmpty else {
+            throw YandexAPIError.unauthorized
+        }
+        return try await operation(token)
     }
 
     func recoverSession() async throws -> String {

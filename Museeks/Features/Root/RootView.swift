@@ -20,7 +20,7 @@ struct RootView: View {
             if sessionStore.session == nil {
                 ConnectView()
             } else {
-                MainTabView(playerNamespace: playerNamespace)
+                rootTabs
                     .fullScreenCover(isPresented: $player.isPlayerPresented) {
                         PlayerView()
                             .playerPresentationBackground()
@@ -99,6 +99,15 @@ struct RootView: View {
             Button("ОК", role: .cancel) {}
         } message: {
             Text(sessionStore.errorMessage ?? "")
+        }
+    }
+
+    @ViewBuilder
+    private var rootTabs: some View {
+        if settings.musicService == .yandex {
+            YandexMainView(playerNamespace: playerNamespace)
+        } else {
+            MainTabView(playerNamespace: playerNamespace)
         }
     }
 

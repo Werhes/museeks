@@ -201,6 +201,11 @@ struct VKMixView: View {
                     selection = updated
                     VKMixSelectionStorage.save(updated, mixID: mix.id)
                     showsSettings = false
+                    // Auto-play the mix with the newly applied settings.
+                    Task {
+                        await load()
+                        startPlayback()
+                    }
                 }
             }
         }
@@ -324,8 +329,9 @@ struct VKMixView: View {
         isLoading = true
         errorMessage = nil
         do {
+            // Load the entire mix (all pages) in one go.
             tracks = try await environment.withAuthorizedToken { token in
-                try await environment.musicService.mixTracksBootstrap(
+                try await environment.musicService.mixTracks(
                     tunedMix,
                     accessToken: token
                 )
@@ -345,31 +351,23 @@ struct VKMixView: View {
         Task {
             defer { isStarting = false }
             do {
-                let bootstrap: [Track]
+                let fullQueue: [Track]
                 if tracks.isEmpty {
-                    bootstrap = try await environment.withAuthorizedToken { token in
-                        try await environment.musicService.mixTracksBootstrap(
+                    // Load the entire mix before starting playback.
+                    fullQueue = try await environment.withAuthorizedToken { token in
+                        try await environment.musicService.mixTracks(
                             tunedMix,
                             accessToken: token
                         )
                     }
-                    tracks = bootstrap
+                    tracks = fullQueue
                 } else {
-                    bootstrap = tracks
+                    fullQueue = tracks
                 }
-                guard let first = bootstrap.first else { return }
+                guard let first = fullQueue.first else { return }
                 player.play(
                     first,
-                    in: bootstrap,
-                    continuation: {
-                        try await environment.withAuthorizedToken { token in
-                            try await environment.musicService
-                                .mixTracksContinuation(
-                                    tunedMix,
-                                    accessToken: token
-                                )
-                        }
-                    },
+                    in: fullQueue,
                     source: .mix(title: displayTitle)
                 )
             } catch is CancellationError {
@@ -626,7 +624,6 @@ private struct VKMixOptionArtwork: View {
                 } placeholder: {
                     fallback
                 }
-                .looping()
                 .resizable()
                 .aspectRatio(contentMode: .fit)
             } else {
