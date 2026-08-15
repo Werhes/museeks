@@ -51,12 +51,12 @@ struct VKGenre: Identifiable, Hashable, Sendable {
             title: title,
             subtitle: L10n.text("Персональный микс"),
             artworkURL: artworkURL,
-            isTunable: false,
             selection: VKMixSelection(
                 valuesByCategory: additional.isEmpty
                     ? [:]
                     : ["additionals": [additional]]
-            )
+            ),
+            isTunable: false
         )
     }
 }
