@@ -11,6 +11,7 @@ final class AppEnvironment: ObservableObject {
     let libraryStore: MusicLibraryStore
     let homeCatalogStore: HomeCatalogStore
     let overviewCatalogStore: OverviewCatalogStore
+    let homeFeedStore: HomeFeedStore
     let likedAlbumsStore: LikedAlbumsStore
     let offlineStore: OfflineTrackStore
     let pinnedMixStore: PinnedMixStore
@@ -45,6 +46,7 @@ final class AppEnvironment: ObservableObject {
         self.libraryStore = MusicLibraryStore()
         self.homeCatalogStore = HomeCatalogStore()
         self.overviewCatalogStore = OverviewCatalogStore()
+        self.homeFeedStore = HomeFeedStore()
         self.likedAlbumsStore = LikedAlbumsStore()
         let trackShareService = TrackShareService()
         self.trackShareService = trackShareService
@@ -433,6 +435,41 @@ final class AppEnvironment: ObservableObject {
             overviewCatalogStore.finish(
                 shelves: nil,
                 bannerURLs: nil,
+                errorMessage: error.localizedDescription,
+                refreshID: refreshID
+            )
+        }
+    }
+
+    func refreshHomeFeed(force: Bool = false) async {
+        homeFeedStore.prepare(
+            accountID: sessionStore.resolvedOfflineAccountID
+        )
+        guard sessionStore.accessToken != nil,
+              homeFeedStore.shouldRefresh(force: force) else {
+            return
+        }
+        let refreshID = homeFeedStore.beginRefreshing()
+        do {
+            let catalog = try await withAuthorizedToken { token in
+                try await musicService.homeFeedCatalog(accessToken: token)
+            }
+            homeFeedStore.finish(
+                shelves: catalog.shelves,
+                bannerURLs: catalog.bannerURLs,
+                genres: catalog.genres,
+                moods: catalog.moods,
+                errorMessage: nil,
+                refreshID: refreshID
+            )
+        } catch is CancellationError {
+            homeFeedStore.cancelRefreshing(refreshID: refreshID)
+        } catch {
+            homeFeedStore.finish(
+                shelves: nil,
+                bannerURLs: nil,
+                genres: nil,
+                moods: nil,
                 errorMessage: error.localizedDescription,
                 refreshID: refreshID
             )

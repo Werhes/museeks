@@ -165,33 +165,40 @@ enum JSONValue: Codable, Sendable {
         }
     }
 
-    /// «Обзор» shelves parsed from a `catalog.getSection` response. Each shelf
-    /// is a block that references either `audios_ids` (tracks) or
-    /// `playlists_ids` (playlists/albums), with full metadata supplied under
-    /// `response.audios` / `response.playlists`.
-    /// The home-feed section id from `catalog.getAudio` root catalog sections.
-    /// Prefers the «Главная» (Home) feed — the rich personalised shelves the
-    /// product shows on the home tab — and falls back to «Обзор» (Overview)
-    /// when «Главная» is absent.
+    /// The «Обзор» section id from `catalog.getAudio` root catalog sections.
+    /// The «Обзор» explore catalog is distinct from the «Главная» home feed.
     var overviewSectionID: String? {
         guard case let .object(object) = self,
               case let .object(catalog)? = object["catalog"],
               case let .array(sections)? = catalog["sections"] else {
             return nil
         }
-        var overviewID: String?
+        for section in sections {
+            guard case let .object(sectionObject) = section else { continue }
+            let title = sectionObject["title"]?.stringValue ?? ""
+            if title == "Обзор" || title == "Overview" {
+                return sectionObject["id"]?.stringValue
+            }
+        }
+        return nil
+    }
+
+    /// The «Главная» (Home) section id from `catalog.getAudio` root catalog
+    /// sections. This is the personalised feed the home tab surfaces.
+    var homeSectionID: String? {
+        guard case let .object(object) = self,
+              case let .object(catalog)? = object["catalog"],
+              case let .array(sections)? = catalog["sections"] else {
+            return nil
+        }
         for section in sections {
             guard case let .object(sectionObject) = section else { continue }
             let title = sectionObject["title"]?.stringValue ?? ""
             if title == "Главная" || title == "Home" {
                 return sectionObject["id"]?.stringValue
             }
-            if overviewID == nil,
-               title == "Обзор" || title == "Overview" {
-                overviewID = sectionObject["id"]?.stringValue
-            }
         }
-        return overviewID
+        return nil
     }
 
     var overviewShelves: [VKOverviewShelf] {
@@ -256,6 +263,97 @@ enum JSONValue: Codable, Sendable {
                     result.append(url)
                     if result.count >= 8 { break }
                 }
+            }
+            if !result.isEmpty { break }
+        }
+        return result
+    }
+
+    /// Genres parsed from the «Жанры» action block of a «Главная» (Home)
+    /// `catalog.getSection` response. Each genre is an `action` item carrying
+    /// a title, a cover image and the `additionals` token used to play its VK
+    /// mix.
+    var overviewGenres: [VKGenre] {
+        guard case let .object(object) = self,
+              case let .object(section)? = object["section"],
+              case let .array(blocks)? = section["blocks"] else {
+            return []
+        }
+        var result: [VKGenre] = []
+        for block in blocks {
+            guard case let .object(blockObject) = block,
+                  blockObject["data_type"]?.stringValue == "action",
+                  let blockTitle = blockObject["title"]?.stringValue,
+                  (blockTitle == "Жанры" || blockTitle == "Genres"),
+                  case let .array(actions)? = blockObject["actions"] else {
+                continue
+            }
+            for action in actions {
+                guard case let .object(item) = action,
+                      let title = item["title"]?.stringValue,
+                      !title.isEmpty else {
+                    continue
+                }
+                let id = item["id"]?.stringValue ?? title
+                let image = item.firstRemoteURL
+                // `mix_options` is delivered as a JSON string (or object); the
+                // existing `mixSelection` parser handles both forms.
+                let additional = item.mixSelection
+                    .valuesByCategory["additionals"]?
+                    .first ?? ""
+                result.append(
+                    VKGenre(
+                        id: id,
+                        title: title,
+                        artworkURL: image,
+                        additional: additional
+                    )
+                )
+            }
+            if !result.isEmpty { break }
+        }
+        return result
+    }
+
+    /// Moods/activities parsed from the «Настроения и занятия» action block of
+    /// a «Главная» (Home) response. Structurally identical to genres, so the
+    /// same `VKGenre` model is reused (each mood plays a VK mix).
+    var overviewMoods: [VKGenre] {
+        guard case let .object(object) = self,
+              case let .object(section)? = object["section"],
+              case let .array(blocks)? = section["blocks"] else {
+            return []
+        }
+        var result: [VKGenre] = []
+        for block in blocks {
+            guard case let .object(blockObject) = block,
+                  blockObject["data_type"]?.stringValue == "action",
+                  let title = blockObject["title"]?.stringValue,
+                  (title.localizedCaseInsensitiveContains("настроени")
+                    || title.localizedCaseInsensitiveContains("mood")
+                    || title.localizedCaseInsensitiveContains("activit")),
+                  case let .array(actions)? = blockObject["actions"] else {
+                continue
+            }
+            for action in actions {
+                guard case let .object(item) = action,
+                      let itemTitle = item["title"]?.stringValue,
+                      !itemTitle.isEmpty else {
+                    continue
+                }
+                let id = item["id"]?.stringValue ?? itemTitle
+                let image = item.firstRemoteURL
+                let additional = item.mixSelection
+                    .valuesByCategory["additionals"]?
+                    .first ?? ""
+                result.append(
+                    VKGenre(
+                        id: id,
+                        title: itemTitle,
+                        artworkURL: image,
+                        additional: additional
+                    )
+                )
             }
             if !result.isEmpty { break }
         }

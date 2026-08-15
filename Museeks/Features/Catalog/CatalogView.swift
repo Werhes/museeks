@@ -7,7 +7,7 @@ struct CatalogView: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var history: ListeningHistoryStore
     @EnvironmentObject private var homeCatalog: HomeCatalogStore
-    @EnvironmentObject private var overviewCatalog: OverviewCatalogStore
+    @EnvironmentObject private var homeFeed: HomeFeedStore
     @EnvironmentObject private var scrollCoordinator: MainTabScrollCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var actionErrorMessage: String?
@@ -40,6 +40,10 @@ struct CatalogView: View {
                             .id(MainTabScrollDestination.home)
 
                         VKMixHomeCard(mix: personalMix)
+
+                        genresSection(metrics: metrics)
+
+                        moodsSection(metrics: metrics)
 
                         AlgorithmicMixSection(mixes: homeCatalog.mixes)
 
@@ -191,7 +195,7 @@ struct CatalogView: View {
         recommendations.isEmpty && playlists.isEmpty
             && homeCatalog.newReleases.isEmpty
             && homeCatalog.mixes.isEmpty
-            && overviewCatalog.shelves.isEmpty
+            && homeFeed.shelves.isEmpty
     }
 
     private var welcomeHeader: some View {
@@ -445,13 +449,13 @@ struct CatalogView: View {
 
     /// «Главная» (Home) feed: renders the personalised shelves returned by the
     /// real VK «Главная» catalog section («Мои треки», «Собрано алгоритмами»,
-    /// «Похоже на …»). The shelves are loaded into `overviewCatalog` by
-    /// `refreshOverviewCatalog` and rendered exactly like the overview explore
-    /// shelves, but on the home tab.
+    /// «Похоже на …»). The shelves are loaded into `homeFeed` by
+    /// `refreshHomeFeed` and rendered like the explore shelves, but on the
+    /// home tab (distinct from the «Обзор» explore catalog).
     @ViewBuilder
     private func homeFeedSections(metrics: HomeMetrics) -> some View {
-        if !overviewCatalog.shelves.isEmpty {
-            ForEach(overviewCatalog.shelves) { shelf in
+        if !homeFeed.shelves.isEmpty {
+            ForEach(homeFeed.shelves) { shelf in
                 switch shelf.kind {
                 case .tracks:
                     homeFeedTracks(shelf, metrics: metrics)
@@ -488,12 +492,18 @@ struct CatalogView: View {
         }
     }
 
+    /// «Для вас» shelf: Открытия, Новинки, Плейлист дня 1–5. Each entry is a
+    /// distinct gradient card that opens its own dedicated screen, not a
+    /// generic playlist detail.
     private func homeFeedPlaylists(
         _ shelf: VKOverviewShelf,
         metrics: HomeMetrics
     ) -> some View {
         VStack(alignment: .leading, spacing: 11) {
-            HomeSectionHeader(shelf.title)
+            HomeSectionHeader(
+                "Для вас",
+                subtitle: shelf.title
+            )
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(
                     alignment: .top,
@@ -501,13 +511,40 @@ struct CatalogView: View {
                 ) {
                     ForEach(shelf.playlists.prefix(14)) { playlist in
                         NavigationLink {
-                            PlaylistDetailView(playlist: playlist)
+                            ForYouSectionView(
+                                playlist: playlist,
+                                accent: forYouColor(for: playlist)
+                            )
                         } label: {
-                            VStack(alignment: .leading, spacing: 6) {
-                                PlaylistArtworkView(
-                                    playlist: playlist,
-                                    size: metrics.playlistWidth
+                            VStack(alignment: .leading, spacing: 8) {
+                                ZStack {
+                                    LinearGradient(
+                                        colors: forYouColors(for: playlist),
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                    Image(systemName: forYouSymbol(for: playlist))
+                                        .font(.system(size: 34, weight: .black))
+                                        .foregroundStyle(.white.opacity(0.92))
+                                }
+                                .frame(
+                                    width: metrics.playlistWidth,
+                                    height: metrics.playlistWidth
                                 )
+                                .clipShape(
+                                    RoundedRectangle(
+                                        cornerRadius: PremiumLayout.artworkRadius(
+                                            for: metrics.playlistWidth
+                                        ),
+                                        style: .continuous
+                                    )
+                                )
+                                .shadow(
+                                    color: .black.opacity(0.18),
+                                    radius: 10,
+                                    y: 5
+                                )
+
                                 Text(playlist.title)
                                     .font(.footnote.weight(.semibold))
                                     .foregroundStyle(.primary)
@@ -516,13 +553,7 @@ struct CatalogView: View {
                                         height: 34,
                                         alignment: .topLeading
                                     )
-                                Text(
-                                    L10n.format(
-                                        "%@ • %@",
-                                        L10n.trackCount(playlist.count),
-                                        playlist.source.shortTitle
-                                    )
-                                )
+                                Text(L10n.trackCount(playlist.count))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
@@ -536,6 +567,157 @@ struct CatalogView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// «Жанры» shelf: rounded-rectangle cards with a photo background and the
+    /// genre name overlaid. Tapping a card opens the genre's VK mix view.
+    @ViewBuilder
+    private func genresSection(metrics: HomeMetrics) -> some View {
+        if !homeFeed.genres.isEmpty {
+            VStack(alignment: .leading, spacing: 11) {
+                HomeSectionHeader("Жанры")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(
+                        alignment: .top,
+                        spacing: metrics.cardSpacing
+                    ) {
+                        ForEach(homeFeed.genres) { genre in
+                            NavigationLink {
+                                MixView(mix: genre.mix)
+                            } label: {
+                                ZStack(alignment: .bottomLeading) {
+                                    CachedRemoteImage(url: genre.artworkURL) { image in
+                                        image.resizable().scaledToFill()
+                                    } placeholder: {
+                                        LinearGradient(
+                                            colors: [
+                                                Color(red: 0.35, green: 0.30, blue: 0.55),
+                                                Color(red: 0.20, green: 0.20, blue: 0.35)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    }
+                                    LinearGradient(
+                                        colors: [.clear, .black.opacity(0.72)],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                    Text(genre.title)
+                                        .font(.headline.weight(.bold))
+                                        .foregroundStyle(.white)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.leading)
+                                        .padding(12)
+                                }
+                                .frame(
+                                    width: metrics.playlistWidth,
+                                    height: metrics.playlistWidth * 0.72
+                                )
+                                .clipShape(
+                                    RoundedRectangle(
+                                        cornerRadius: PremiumLayout.compactRadius,
+                                        style: .continuous
+                                    )
+                                )
+                            }
+                            .buttonStyle(PremiumPressStyle())
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// «Настроения и занятия» (Moods and Activities) shelf: rounded-rectangle
+    /// cards with a photo background and the mood name overlaid, opening the
+    /// mood's VK mix.
+    @ViewBuilder
+    private func moodsSection(metrics: HomeMetrics) -> some View {
+        if !homeFeed.moods.isEmpty {
+            VStack(alignment: .leading, spacing: 11) {
+                HomeSectionHeader("Настроения и занятия")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(
+                        alignment: .top,
+                        spacing: metrics.cardSpacing
+                    ) {
+                        ForEach(homeFeed.moods) { mood in
+                            NavigationLink {
+                                MixView(mix: mood.mix)
+                            } label: {
+                                ZStack(alignment: .bottomLeading) {
+                                    CachedRemoteImage(url: mood.artworkURL) { image in
+                                        image.resizable().scaledToFill()
+                                    } placeholder: {
+                                        LinearGradient(
+                                            colors: [
+                                                Color(red: 0.55, green: 0.30, blue: 0.60),
+                                                Color(red: 0.30, green: 0.25, blue: 0.45)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    }
+                                    LinearGradient(
+                                        colors: [.clear, .black.opacity(0.72)],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                    Text(mood.title)
+                                        .font(.headline.weight(.bold))
+                                        .foregroundStyle(.white)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.leading)
+                                        .padding(12)
+                                }
+                                .frame(
+                                    width: metrics.playlistWidth,
+                                    height: metrics.playlistWidth * 0.72
+                                )
+                                .clipShape(
+                                    RoundedRectangle(
+                                        cornerRadius: PremiumLayout.compactRadius,
+                                        style: .continuous
+                                    )
+                                )
+                            }
+                            .buttonStyle(PremiumPressStyle())
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func forYouColor(for playlist: Playlist) -> Color {
+        switch playlist.title {
+        case let t where t.contains("Новинки"):
+            return Color(red: 0.40, green: 0.25, blue: 0.95)
+        case let t where t.contains("Открытия"):
+            return Color(red: 0.05, green: 0.55, blue: 1.0)
+        case let t where t.contains("Плейлист дня"):
+            return Color(red: 0.95, green: 0.40, blue: 0.65)
+        case let t where t.contains("Для вас"):
+            return Color(red: 0.98, green: 0.45, blue: 0.15)
+        default:
+            return Color(red: 0.20, green: 0.65, blue: 0.55)
+        }
+    }
+
+    private func forYouColors(for playlist: Playlist) -> [Color] {
+        let base = forYouColor(for: playlist)
+        return [base, base.opacity(0.6), base.opacity(0.35)]
+    }
+
+    private func forYouSymbol(for playlist: Playlist) -> String {
+        switch playlist.title {
+        case let t where t.contains("Новинки"): return "sparkles"
+        case let t where t.contains("Открытия"): return "safari.fill"
+        case let t where t.contains("Плейлист дня"): return "calendar"
+        case let t where t.contains("Для вас"): return "heart.fill"
+        default: return "music.note"
         }
     }
 
@@ -897,7 +1079,7 @@ struct CatalogView: View {
 
     private func load(force: Bool = false) async {
         async let home: Void = environment.refreshHomeCatalog(force: force)
-        async let feed: Void = environment.refreshOverviewCatalog(force: force)
+        async let feed: Void = environment.refreshHomeFeed(force: force)
         _ = await (home, feed)
     }
 }

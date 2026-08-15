@@ -16,6 +16,7 @@ protocol MusicService: Sendable {
     func mixes(accessToken: String) async throws -> [MusicMix]
     func catalogSnapshot(accessToken: String) async throws -> VKCatalogSnapshot
     func overviewCatalog(accessToken: String) async throws -> VKOverviewCatalog
+    func homeFeedCatalog(accessToken: String) async throws -> VKOverviewCatalog
     func newReleases(accessToken: String) async throws -> [Album]
     func mixSettings(
         _ mix: MusicMix,

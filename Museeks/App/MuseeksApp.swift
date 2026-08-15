@@ -17,6 +17,7 @@ struct MuseeksApp: App {
                 .environmentObject(environment.libraryStore)
                 .environmentObject(environment.homeCatalogStore)
                 .environmentObject(environment.overviewCatalogStore)
+                .environmentObject(environment.homeFeedStore)
                 .environmentObject(environment.likedAlbumsStore)
                 .environmentObject(environment.offlineStore)
                 .environmentObject(environment.pinnedMixStore)

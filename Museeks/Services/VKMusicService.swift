@@ -313,7 +313,7 @@ struct VKMusicService: MusicService {
                 path: "/method/catalog.getSection",
                 form: common(accessToken).merging(
                     withDeviceID([
-                        "section_id": VKOverviewSectionID.home,
+                        "section_id": VKOverviewSectionID.explore,
                         "need_blocks": "1",
                         "extended": "1"
                     ])
@@ -328,7 +328,66 @@ struct VKMusicService: MusicService {
         guard !shelves.isEmpty || !banners.isEmpty else {
             throw APIError.invalidResponse
         }
-        return VKOverviewCatalog(shelves: shelves, bannerURLs: banners)
+        return VKOverviewCatalog(
+            shelves: shelves,
+            bannerURLs: banners,
+            genres: [],
+            moods: []
+        )
+    }
+
+    /// Loads the «Главная» (Home) personalised feed shelves. Unlike
+    /// `overviewCatalog`, this targets the «Главная» section (Мои треки,
+    /// Собрано алгоритмами, Похоже на …) so the home tab is distinct from
+    /// the «Обзор» explore catalog.
+    func homeFeedCatalog(accessToken: String) async throws -> VKOverviewCatalog {
+        let payload: JSONValue
+        do {
+            let root: VKResponse<JSONValue> = try await client.post(
+                path: "/method/catalog.getAudio",
+                form: common(accessToken).merging(
+                    withDeviceID([
+                        "need_blocks": "1",
+                        "extended": "1"
+                    ])
+                ) { _, new in new },
+                responseType: VKResponse<JSONValue>.self
+            )
+            let sectionID = root.response.homeSectionID
+                ?? VKOverviewSectionID.home
+            let envelope: VKResponse<JSONValue> = try await client.post(
+                path: "/method/catalog.getSection",
+                form: common(accessToken).merging(
+                    withDeviceID([
+                        "section_id": sectionID,
+                        "need_blocks": "1",
+                        "extended": "1"
+                    ])
+                ) { _, new in new },
+                responseType: VKResponse<JSONValue>.self
+            )
+            payload = envelope.response
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as APIError where error == .unauthorized {
+            throw error
+        } catch let error as APIError where error.isConnectivityFailure {
+            throw error
+        } catch {
+            throw APIError.invalidResponse
+        }
+
+        let shelves = payload.overviewShelves
+        let banners = payload.overviewBannerURLs
+        guard !shelves.isEmpty || !banners.isEmpty else {
+            throw APIError.invalidResponse
+        }
+        return VKOverviewCatalog(
+            shelves: shelves,
+            bannerURLs: banners,
+            genres: payload.overviewGenres,
+            moods: payload.overviewMoods
+        )
     }
 
     func mixSettings(
@@ -1203,7 +1262,7 @@ struct VKMusicService: MusicService {
             "access_token": token,
             "v": apiVersion,
             "https": "1",
-            "lang": "ru"
+            "lang": "en"
         ]
         return parameters
     }

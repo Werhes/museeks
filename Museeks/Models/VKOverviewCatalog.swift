@@ -23,8 +23,42 @@ struct VKOverviewShelf: Identifiable, Hashable, Sendable {
 struct VKOverviewCatalog: Sendable {
     var shelves: [VKOverviewShelf]
     var bannerURLs: [URL]
+    var genres: [VKGenre]
+    var moods: [VKGenre]
 
-    var isEmpty: Bool { shelves.allSatisfy(\.isEmpty) && bannerURLs.isEmpty }
+    var isEmpty: Bool {
+        shelves.allSatisfy(\.isEmpty)
+            && bannerURLs.isEmpty
+            && genres.isEmpty
+            && moods.isEmpty
+    }
+}
+
+/// A music genre surfaced on the «Главная» (Home) feed («Поп», «Хип-хоп», …).
+/// Tapping a genre plays the VK mix with the genre applied as an
+/// `additionals` option.
+struct VKGenre: Identifiable, Hashable, Sendable {
+    let id: String
+    let title: String
+    let artworkURL: URL?
+    /// Genre token sent to the VK mix, e.g. `pop` for «Поп».
+    let additional: String
+
+    /// The `MusicMix` used to launch playback for this genre.
+    var mix: MusicMix {
+        MusicMix(
+            id: MusicMix.common.id,
+            title: title,
+            subtitle: L10n.text("Персональный микс"),
+            artworkURL: artworkURL,
+            isTunable: false,
+            selection: VKMixSelection(
+                valuesByCategory: additional.isEmpty
+                    ? [:]
+                    : ["additionals": [additional]]
+            )
+        )
+    }
 }
 
 /// Fallback section ids for the home-feed catalog. The real id is resolved at
