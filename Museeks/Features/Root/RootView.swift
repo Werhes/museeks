@@ -20,15 +20,7 @@ struct RootView: View {
             if sessionStore.session == nil {
                 ConnectView()
             } else {
-                rootTabs
-                    .fullScreenCover(isPresented: $player.isPlayerPresented) {
-                        PlayerView()
-                            .playerPresentationBackground()
-                            .playerZoomTransition(from: playerNamespace)
-                    }
-                    .safeAreaInset(edge: .top, spacing: 0) {
-                        connectionBanner
-                    }
+                authenticatedContent
             }
         }
         .task(id: sessionStore.sessionRevision) {
@@ -102,13 +94,19 @@ struct RootView: View {
         }
     }
 
+    /// Authenticated app content: the tab interface plus the full-screen
+    /// player and connection banner.
     @ViewBuilder
-    private var rootTabs: some View {
-        if settings.musicService == .yandex {
-            YandexMainView(playerNamespace: playerNamespace)
-        } else {
-            MainTabView(playerNamespace: playerNamespace)
-        }
+    private var authenticatedContent: some View {
+        MainTabView(playerNamespace: playerNamespace)
+            .fullScreenCover(isPresented: $player.isPlayerPresented) {
+                PlayerView()
+                    .playerPresentationBackground()
+                    .playerZoomTransition(from: playerNamespace)
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                connectionBanner
+            }
     }
 
     @ViewBuilder

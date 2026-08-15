@@ -20,7 +20,6 @@ struct MuseeksApp: App {
                 .environmentObject(environment.likedAlbumsStore)
                 .environmentObject(environment.offlineStore)
                 .environmentObject(environment.pinnedMixStore)
-                .environmentObject(environment.yandexHomeStore)
                 .environmentObject(environment.player)
                 .environmentObject(environment.player.progress)
         }

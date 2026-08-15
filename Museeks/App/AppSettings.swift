@@ -33,29 +33,6 @@ enum AppTheme: String, CaseIterable, Identifiable {
     }
 }
 
-/// The streaming backend powering the app. Switching changes the active
-/// tab navigation, home feed and service used for playback data.
-enum MusicServiceKind: String, CaseIterable, Identifiable {
-    case vk
-    case yandex
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .vk: L10n.text("VK Музыка")
-        case .yandex: L10n.text("Яндекс Музыка")
-        }
-    }
-
-    var shortTitle: String {
-        switch self {
-        case .vk: "VK"
-        case .yandex: "Яндекс"
-        }
-    }
-}
-
 enum AppearanceMode: String, CaseIterable, Identifiable {
     case system
     case dark
@@ -151,12 +128,6 @@ enum EqualizerPreset: String, CaseIterable, Identifiable {
 
 @MainActor
 final class AppSettings: ObservableObject {
-    @Published var musicService: MusicServiceKind {
-        didSet { defaults.set(musicService.rawValue, forKey: Keys.musicService) }
-    }
-    @Published var yandexToken: String {
-        didSet { defaults.set(yandexToken, forKey: Keys.yandexToken) }
-    }
     @Published var theme: AppTheme {
         didSet { defaults.set(theme.rawValue, forKey: Keys.theme) }
     }
@@ -275,10 +246,6 @@ final class AppSettings: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         let settingsVersion = defaults.integer(forKey: Keys.version)
-        musicService = MusicServiceKind(
-            rawValue: defaults.string(forKey: Keys.musicService) ?? ""
-        ) ?? .vk
-        yandexToken = defaults.string(forKey: Keys.yandexToken) ?? ""
         if settingsVersion < 3 {
             theme = .dark
             appearance = .dark
@@ -390,8 +357,6 @@ final class AppSettings: ObservableObject {
 
     private enum Keys {
         static let version = "settings.schema.version"
-        static let musicService = "service.music.kind"
-        static let yandexToken = "service.yandex.token"
         static let theme = "appearance.theme"
         static let appearance = "appearance.mode"
         static let textScale = "appearance.textScale"

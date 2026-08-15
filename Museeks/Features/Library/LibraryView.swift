@@ -11,6 +11,7 @@ struct LibraryView: View {
     @EnvironmentObject private var networkMonitor: NetworkMonitor
     @EnvironmentObject private var scrollCoordinator: MainTabScrollCoordinator
     @EnvironmentObject private var pinnedMixStore: PinnedMixStore
+    @EnvironmentObject private var history: ListeningHistoryStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var offlinePlaylists =
         OfflinePlaylistStore.shared
@@ -29,7 +30,11 @@ struct LibraryView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
-                    listenLaterSection
+                    myTracksTeaser
+
+                    MixByMyMusicCard(mix: .common)
+
+                    recentlyListenedSection
 
                     if playlists.isLoading && playlists.playlists.isEmpty {
                         playlistSkeleton
@@ -40,47 +45,10 @@ struct LibraryView: View {
                         albumShelf
                     }
 
-                    libraryTracksHeader
-
-                    if tracks.isLoading && tracks.tracks.isEmpty {
-                        trackSkeleton
-                    } else if let error = tracks.errorMessage,
-                              tracks.tracks.isEmpty {
-                        VStack(spacing: 14) {
-                            EmptyStateView(
-                                title: "Не удалось загрузить треки",
-                                systemImage: "wifi.exclamationmark",
-                                description: error
-                            )
-                            Button("Повторить") {
-                                Task { await loadTracks(force: true) }
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
-                        .frame(minHeight: 260)
-                    } else if tracks.tracks.isEmpty {
-                        EmptyStateView(
-                            title: "Медиатека пуста",
-                            systemImage: "music.note",
-                            description: "Добавленные во VK треки появятся здесь."
-                        )
-                        .frame(height: 260)
-                    } else {
-                        LazyVStack(spacing: 0) {
-                            ForEach(Array(tracks.tracks.enumerated()), id: \.element.id) {
-                                index, track in
-                                libraryRow(track)
-                                    .transition(.opacity.combined(with: .move(edge: .top)))
-                                    .onAppear {
-                                        loadMoreIfNeeded(after: track)
-                                    }
-                                if index < tracks.tracks.count - 1 {
-                                    Divider().padding(.leading, 66)
-                                }
-                            }
-                        }
-                        .animation(.easeInOut(duration: 0.3), value: tracks.tracks.map(\.id))
-                    }
+                    LibraryMoreGrid(
+                        downloadedCount: offlineStore.downloadedTrackCount,
+                        libraryTracks: tracks.tracks
+                    )
                 }
                 .id(MainTabScrollDestination.library)
                 .padding(.horizontal, 16)
@@ -362,6 +330,51 @@ struct LibraryView: View {
                     mix,
                     accessToken: token
                 )
+            }
+        }
+    }
+
+    /// "Мои треки" teaser: shows a few tracks and a chevron that opens the
+    /// full library tracks page.
+    private var myTracksTeaser: some View {
+        MyTracksTeaserCard(
+            tracks: tracks.tracks,
+            totalCount: tracks.totalCount
+        )
+    }
+
+    /// Recently listened shelf (from the local listening history).
+    @ViewBuilder
+    private var recentlyListenedSection: some View {
+        let recentTracks = Array(history.entries.prefix(10)).map(\.track)
+        if !recentTracks.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(L10n.text("Недавно слушали"))
+                    .font(.title2.weight(.bold))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 14) {
+                        ForEach(recentTracks) { track in
+                            Button {
+                                Haptics.selection()
+                                player.play(track, in: recentTracks)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    AsyncArtwork(url: track.artworkURL, size: 136)
+                                    Text(track.title)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                    Text(track.artist)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                .frame(width: 136, alignment: .leading)
+                            }
+                            .buttonStyle(PremiumPressStyle())
+                        }
+                    }
+                }
             }
         }
     }
@@ -898,7 +911,7 @@ struct LibraryView: View {
     }
 }
 
-private enum LibraryDownloadRequest {
+enum LibraryDownloadRequest {
     case track(Track)
     case all
 }
