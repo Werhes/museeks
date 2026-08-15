@@ -242,6 +242,15 @@ enum CatalogSectionPolicy {
     }
 }
 
+enum ArtistMixPolicy {
+    /// How many library items to scan for `main_artists`.
+    static let libraryPageSize = 100
+    /// Maximum artist cards shown in the «Микс по артисту» shelf.
+    static let maximumCards = 12
+    /// How many `audio.searchArtists` candidates to compare per artist.
+    static let searchCandidates = 8
+}
+
 enum VKArtistMatch {
     static func best(
         in candidates: [VKArtist],

@@ -15,6 +15,9 @@ protocol MusicService: Sendable {
     ) async throws -> Track
     func mixes(accessToken: String) async throws -> [MusicMix]
     func catalogSnapshot(accessToken: String) async throws -> VKCatalogSnapshot
+    /// Artists used to build the «Микс по артисту» shelf, derived from the
+    /// user's library `main_artists` and resolved with their photos.
+    func artistMixArtists(accessToken: String) async throws -> [VKArtist]
     func overviewCatalog(accessToken: String) async throws -> VKOverviewCatalog
     func homeFeedCatalog(accessToken: String) async throws -> VKOverviewCatalog
     func newReleases(accessToken: String) async throws -> [Album]
@@ -130,6 +133,11 @@ protocol MusicService: Sendable {
 }
 
 extension MusicService {
+    /// Default: non-VK providers do not expose artist-mix cards.
+    func artistMixArtists(accessToken: String) async throws -> [VKArtist] {
+        []
+    }
+
     /// Full mix queue fill (bootstrap + remaining pages).
     func mixTracks(
         _ mix: MusicMix,

@@ -78,6 +78,47 @@ enum JSONValue: Codable, Sendable {
         return Int(value.rounded())
     }
 
+    /// Distinct artist identities referenced by the top-level `audio.get`
+    /// library items via their `main_artists` block. Artists carry an id and a
+    /// name but no photo — the photo is resolved separately via
+    /// `audio.searchArtists` when building artist-mix cards.
+    var libraryArtists: [VKArtist] {
+        guard case let .object(object) = self,
+              case let .array(values)? = object["items"] else {
+            return []
+        }
+        var result: [VKArtist] = []
+        var seen = Set<String>()
+        for value in values {
+            guard case let .object(item) = value else { continue }
+            guard case let .array(mainArtists)? = item["main_artists"] else {
+                continue
+            }
+            for artist in mainArtists {
+                guard case let .object(artistObject) = artist else {
+                    continue
+                }
+                guard let name = artistObject["name"]?.stringValue,
+                      !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                else { continue }
+                let id = artistObject["id"]?.stringValue
+                    ?? artistObject["domain"]?.stringValue
+                guard let id, !id.isEmpty, seen.insert(id).inserted else {
+                    continue
+                }
+                result.append(
+                    VKArtist(
+                        id: id,
+                        name: name,
+                        photoURL: nil,
+                        isAlbumCover: false
+                    )
+                )
+            }
+        }
+        return result
+    }
+
     var musicMixes: [MusicMix] {
         var collected: [MusicMix] = []
         collectMixes(into: &collected)

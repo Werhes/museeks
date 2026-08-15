@@ -181,6 +181,75 @@ struct VKMusicService: MusicService {
         return snapshot.mixes
     }
 
+    /// Artists for the «Микс по артисту» shelf. The user's library
+    /// `audio.get` items expose artist ids + names (no photos); each distinct
+    /// artist is then resolved to a photo via `audio.searchArtists` in parallel
+    /// so the shelf can show square artist avatars like the official VK app.
+    func artistMixArtists(accessToken: String) async throws -> [VKArtist] {
+        let userID = try await resolvedUserID(accessToken: accessToken)
+        let count = ArtistMixPolicy.libraryPageSize
+        var artists: [VKArtist] = []
+        var seen = Set<String>()
+
+        // Scan the first page of the personal library for `main_artists`.
+        var parameters = [
+            "count": String(count),
+            "offset": "0"
+        ]
+        if let userID {
+            parameters["owner_id"] = String(userID)
+        }
+        let envelope: VKResponse<JSONValue> = try await client.post(
+            path: "/method/audio.get",
+            form: common(accessToken).merging(parameters) { _, new in new },
+            responseType: VKResponse<JSONValue>.self
+        )
+        for artist in envelope.response.libraryArtists
+        where seen.insert(artist.id).inserted {
+            artists.append(artist)
+            if artists.count >= ArtistMixPolicy.maximumCards { break }
+        }
+        guard !artists.isEmpty else { return [] }
+
+        // Resolve each artist's photo in parallel; keep the library identity
+        // (id + name) and only graft on a photo when a confident match exists.
+        return await withTaskGroup(
+            of: VKArtist.self,
+            returning: [VKArtist].self
+        ) { group in
+            for artist in artists {
+                group.addTask {
+                    let resolved = try? await self.searchArtists(
+                        query: artist.name,
+                        accessToken: accessToken,
+                        offset: 0,
+                        count: ArtistMixPolicy.searchCandidates
+                    )
+                    guard let best = VKArtistMatch.best(
+                        in: resolved ?? [],
+                        named: artist.name
+                    ) else {
+                        return artist
+                    }
+                    return VKArtist(
+                        id: artist.id,
+                        name: artist.name,
+                        photoURL: best.photoURL ?? artist.photoURL,
+                        isAlbumCover: best.isAlbumCover
+                    )
+                }
+            }
+            var collected: [VKArtist] = []
+            for await artist in group {
+                collected.append(artist)
+            }
+            return collected.sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name)
+                    == .orderedAscending
+            }
+        }
+    }
+
     /// Loads mixes and new-release albums from real catalog section ids
     /// returned by `catalog.getAudio`, then hydrates matching official
     /// sections via `catalog.getSection` in parallel.

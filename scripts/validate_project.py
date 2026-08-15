@@ -96,10 +96,12 @@ def main() -> None:
     for marker in (
         "runs-on: macos-26",
         "CODE_SIGNING_ALLOWED=NO",
-        "uses: actions/upload-artifact@v4",
-        "uses: actions/download-artifact@v4",
         "contents: write",
-        "gh release",
+        # The release is published directly from the build job via the GitHub
+        # CLI (release create / gh release upload) rather than GitHub Actions
+        # artifact staging, so a full artifact store can never block publishing.
+        "release create \"$tag\"",
+        "gh release upload",
     ):
         if marker not in workflow:
             raise AssertionError(f"Release workflow lacks {marker!r}")

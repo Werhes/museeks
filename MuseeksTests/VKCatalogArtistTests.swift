@@ -190,4 +190,63 @@ final class VKCatalogArtistTests: XCTestCase {
             "https://cdn.example/p600.jpg"
         )
     }
+
+    func testLibraryArtistsExtractedFromAudioGetShape() throws {
+        let data = """
+        {
+          "count": 3,
+          "items": [
+            {
+              "id": 1,
+              "owner_id": 1,
+              "artist": "Rare Monk",
+              "title": "Track A",
+              "main_artists": [
+                {"name": "Rare Monk", "domain": "art-rare", "id": "4373853950134918274"}
+              ]
+            },
+            {
+              "id": 2,
+              "owner_id": 1,
+              "artist": "Virtuals",
+              "title": "Track B",
+              "main_artists": [
+                {"name": "Virtuals", "domain": "art-virt", "id": "5854002937811188266"}
+              ]
+            },
+            {
+              "id": 3,
+              "owner_id": 1,
+              "artist": "Rare Monk",
+              "title": "Track C",
+              "main_artists": [
+                {"name": "Rare Monk", "domain": "art-rare", "id": "4373853950134918274"}
+              ]
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let value = try JSONDecoder().decode(JSONValue.self, from: data)
+        let artists = value.libraryArtists
+
+        XCTAssertEqual(artists.count, 2)
+        XCTAssertEqual(
+            artists.map(\.id).sorted(),
+            ["4373853950134918274", "5854002937811188266"].sorted()
+        )
+        XCTAssertTrue(
+            artists.contains { $0.name == "Rare Monk" && $0.photoURL == nil }
+        )
+        XCTAssertTrue(
+            artists.contains { $0.name == "Virtuals" }
+        )
+    }
+
+    func testArtistMixPolicyBoundsAreSane() {
+        XCTAssertGreaterThan(ArtistMixPolicy.maximumCards, 0)
+        XCTAssertLessThanOrEqual(ArtistMixPolicy.maximumCards, 20)
+        XCTAssertGreaterThan(ArtistMixPolicy.searchCandidates, 0)
+        XCTAssertGreaterThan(ArtistMixPolicy.libraryPageSize, 0)
+    }
 }

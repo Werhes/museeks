@@ -18,6 +18,8 @@ struct CatalogView: View {
     @State private var albumLookupTask: Task<Void, Never>?
     @State private var detailDestination: TrackDetailDestination?
     @State private var mode: CatalogMode = .home
+    @State private var artistMixes: [VKArtist] = []
+    @State private var isLoadingArtistMixes = false
 
     var body: some View {
         switch mode {
@@ -69,6 +71,14 @@ struct CatalogView: View {
                             // personalised sections returned by the real VK
                             // «Главная» catalog section.
                             homeFeedSections(metrics: metrics)
+
+                            // «Микс по артисту» — square artist cards sourced
+                            // from the user's library, each playing a
+                            // continuous mix built around that artist.
+                            ArtistMixSection(
+                                artists: artistMixes,
+                                metrics: metrics
+                            )
 
                             if contentIsEmpty { unavailableView }
                             if let errorMessage, !contentIsEmpty {
@@ -1080,7 +1090,32 @@ struct CatalogView: View {
     private func load(force: Bool = false) async {
         async let home: Void = environment.refreshHomeCatalog(force: force)
         async let feed: Void = environment.refreshHomeFeed(force: force)
-        _ = await (home, feed)
+        async let artists: Void = loadArtistMixes(force: force)
+        _ = await (home, feed, artists)
+    }
+
+    /// Loads the «Микс по артисту» shelf from the user's library. Best-effort:
+    /// a thin or failed library page simply hides the shelf instead of
+    /// surfacing an error on the home screen.
+    private func loadArtistMixes(force: Bool = false) async {
+        guard sessionStore.accessToken != nil,
+              force || (artistMixes.isEmpty && !isLoadingArtistMixes)
+        else { return }
+        isLoadingArtistMixes = true
+        defer { isLoadingArtistMixes = false }
+        do {
+            let artists = try await environment.withAuthorizedToken { token in
+                try await environment.musicService.artistMixArtists(
+                    accessToken: token
+                )
+            }
+            guard !Task.isCancelled else { return }
+            artistMixes = artists
+        } catch is CancellationError {
+            return
+        } catch {
+            // Best-effort shelf — leave whatever we already have.
+        }
     }
 }
 
@@ -1098,7 +1133,7 @@ enum CatalogMode: String, CaseIterable, Identifiable {
     }
 }
 
-private struct HomeMetrics {
+struct HomeMetrics {
     let containerWidth: CGFloat
 
     var horizontalPadding: CGFloat {
