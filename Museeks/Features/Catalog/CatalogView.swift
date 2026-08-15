@@ -565,20 +565,21 @@ struct CatalogView: View {
                                         )
                                     }
                                     LinearGradient(
-                                        colors: [.clear, .black.opacity(0.72)],
+                                        colors: [.clear, .black.opacity(0.88)],
                                         startPoint: .top,
                                         endPoint: .bottom
                                     )
                                     Text(genre.title)
-                                        .font(.headline.weight(.bold))
+                                        .font(.title3.weight(.bold))
                                         .foregroundStyle(.white)
                                         .lineLimit(2)
                                         .multilineTextAlignment(.leading)
-                                        .padding(12)
+                                        .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
+                                        .padding(14)
                                 }
                                 .frame(
-                                    width: metrics.playlistWidth,
-                                    height: metrics.playlistWidth
+                                    width: metrics.genreWidth,
+                                    height: metrics.genreWidth * 0.5
                                 )
                                 .clipShape(
                                     RoundedRectangle(
@@ -626,20 +627,21 @@ struct CatalogView: View {
                                         )
                                     }
                                     LinearGradient(
-                                        colors: [.clear, .black.opacity(0.72)],
+                                        colors: [.clear, .black.opacity(0.88)],
                                         startPoint: .top,
                                         endPoint: .bottom
                                     )
                                     Text(mood.title)
-                                        .font(.headline.weight(.bold))
+                                        .font(.title3.weight(.bold))
                                         .foregroundStyle(.white)
                                         .lineLimit(2)
                                         .multilineTextAlignment(.leading)
-                                        .padding(12)
+                                        .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
+                                        .padding(14)
                                 }
                                 .frame(
-                                    width: metrics.playlistWidth,
-                                    height: metrics.playlistWidth
+                                    width: metrics.genreWidth,
+                                    height: metrics.genreWidth * 0.5
                                 )
                                 .clipShape(
                                     RoundedRectangle(
@@ -1094,6 +1096,11 @@ struct HomeMetrics {
 
     var playlistWidth: CGFloat {
         min(max(containerWidth * 0.35, 112), 140)
+    }
+
+    /// Квадратные карточки жанров/настроений в размер картинки VK.
+    var genreWidth: CGFloat {
+        min(max(containerWidth * 0.52, 168), 216)
     }
 
     var newReleaseWidth: CGFloat {
