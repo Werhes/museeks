@@ -31,6 +31,8 @@
   <false/>
   <key>UIApplicationSupportsIndirectInputEvents</key>
   <true/>
+  <key>NSCameraUsageDescription</key>
+  <string>Museeks использует камеру для сканирования QR-кода входа в VK.</string>
   <key>CADisableMinimumFrameDurationOnPhone</key>
   <true/>
   <!-- Required when building with the iOS 27 SDK (TN3187): without a

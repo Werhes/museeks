@@ -13,7 +13,7 @@ struct LibraryTracksPage: View {
     @EnvironmentObject private var offlineStore: OfflineTrackStore
     @Environment(\.dismiss) private var dismiss
 
-    @ObservedObject private var tracks = TrackCollectionViewModel(source: .library)
+    @StateObject private var tracks = TrackCollectionViewModel(source: .library)
 
     @State private var section: TracksSection = .myMusic
     @State private var searchText = ""
@@ -33,8 +33,8 @@ struct LibraryTracksPage: View {
 
         var title: String {
             switch self {
-            case .myMusic: L10n.text("My Music")
-            case .downloaded: L10n.text("Downloaded")
+            case .myMusic: L10n.text("Моя музыка")
+            case .downloaded: L10n.text("Скачанное")
             }
         }
     }
@@ -67,29 +67,6 @@ struct LibraryTracksPage: View {
 
             ToolbarItem(placement: .principal) {
                 toggleHeader
-            }
-
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Button {
-                    // Sound settings placeholder.
-                } label: {
-                    Image(systemName: "slider.horizontal.3")
-                }
-                .accessibilityLabel(L10n.text("Настройки звука"))
-
-                Menu {
-                    Button {
-                        sharingTrack = nil
-                    } label: {
-                        Label(
-                            L10n.text("Поделиться"),
-                            systemImage: "square.and.arrow.up"
-                        )
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                }
-                .accessibilityLabel(L10n.text("Ещё"))
             }
         }
         .trackShareSheet(track: $sharingTrack)
@@ -135,9 +112,9 @@ struct LibraryTracksPage: View {
     private var sectionTitle: String {
         switch section {
         case .myMusic:
-            return L10n.text("My Music")
+            return L10n.text("Моя музыка")
         case .downloaded:
-            return L10n.text("Downloaded")
+            return L10n.text("Скачанное")
         }
     }
 
@@ -194,7 +171,7 @@ struct LibraryTracksPage: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
             TextField(
-                L10n.text("Search…"),
+                L10n.text("Поиск…"),
                 text: $searchText
             )
             .textFieldStyle(.plain)
@@ -221,7 +198,7 @@ struct LibraryTracksPage: View {
                     HStack(spacing: 6) {
                         Image(systemName: "shuffle")
                             .font(.caption.weight(.bold))
-                        Text(L10n.text("Shuffle all"))
+                        Text(L10n.text("Перемешать всё"))
                             .font(.subheadline.weight(.semibold))
                     }
                     .foregroundStyle(purpleAccent)
@@ -297,7 +274,7 @@ struct LibraryTracksPage: View {
 
     private var headerWithCount: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(section == .myMusic ? L10n.text("All") : sectionTitle)
+            Text(section == .myMusic ? L10n.text("Все") : sectionTitle)
                 .font(.title2.weight(.bold))
             Text("\(totalCount)")
                 .font(.subheadline.monospacedDigit())
@@ -366,7 +343,7 @@ struct LibraryTracksPage: View {
 
     private var downloadAllButtonTitle: String {
         guard isDownloadingAll, bulkDownloadTotal > 0 else {
-            return L10n.text("Download all")
+            return L10n.text("Скачать всё")
         }
         return "\(bulkDownloadCompleted)/\(bulkDownloadTotal)"
     }

@@ -313,7 +313,7 @@ struct VKMusicService: MusicService {
                 path: "/method/catalog.getSection",
                 form: common(accessToken).merging(
                     withDeviceID([
-                        "section_id": VKOverviewSectionID.explore,
+                        "section_id": VKOverviewSectionID.home,
                         "need_blocks": "1",
                         "extended": "1"
                     ])

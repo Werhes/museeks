@@ -112,7 +112,7 @@ struct MixByMyMusicCard: View {
                 )
 
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(L10n.text("Mix by My music"))
+                    Text(L10n.text("Мой микс"))
                         .font(.system(size: 24, weight: .black, design: .rounded))
                     Text(L10n.text("Персональная подборка на основе ваших треков"))
                         .font(.subheadline.weight(.medium))
@@ -224,7 +224,7 @@ struct LibraryMoreGrid: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.text("More"))
+            Text(L10n.text("Ещё"))
                 .font(.title2.weight(.bold))
 
             LazyVGrid(
@@ -288,9 +288,17 @@ struct LibraryMoreGrid: View {
                 }
                 .buttonStyle(PremiumPressStyle())
             default:
-                // Placeholder for sections without a VK data source.
-                moreLabel(item, count: nil)
-                    .opacity(0.75)
+                // Placeholder screen for sections without a VK data source.
+                NavigationLink {
+                    LibraryPlaceholderScreen(
+                        title: item.title,
+                        systemImage: item.systemImage,
+                        tint: item.tint
+                    )
+                } label: {
+                    moreLabel(item, count: nil)
+                }
+                .buttonStyle(PremiumPressStyle())
             }
         }
     }

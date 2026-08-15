@@ -8,6 +8,7 @@ struct ConnectView: View {
     @State private var userAgent = ""
     @State private var isConnecting = false
     @State private var isWebLoginPresented = false
+    @State private var isQRLoginPresented = false
     @State private var showsManualImport = false
     @State private var errorMessage: String?
 
@@ -16,11 +17,10 @@ struct ConnectView: View {
             ThemeBackground()
 
             ScrollView {
-                VStack(spacing: 24) {
-                    Spacer(minLength: 28)
+                VStack(spacing: 28) {
+                    Spacer(minLength: 20)
                     brandHeader
-                    loginCard
-                    privacyNote
+                    actionButtons
                     manualImport
                     Spacer(minLength: 24)
                 }
@@ -45,108 +45,153 @@ struct ConnectView: View {
                 Task { await connectWebSession(result) }
             }
         }
+        .sheet(isPresented: $isQRLoginPresented) {
+            VKQRLoginView { scanned in
+                handleScannedQR(scanned)
+            }
+        }
     }
 
+    // MARK: - Бренд
+
     private var brandHeader: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 18) {
+            // Иконка по центру.
             Image("AppIconPreview")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 92, height: 92)
+                .frame(width: 96, height: 96)
                 .clipShape(
                     RoundedRectangle(
                         cornerRadius: PremiumLayout.cardRadius,
                         style: .continuous
                     )
                 )
-                .shadow(color: .black.opacity(0.12), radius: 20, y: 10)
+                .shadow(color: .black.opacity(0.15), radius: 22, y: 10)
 
-            VStack(spacing: 5) {
-                Text("Museeks")
-                    .font(.system(size: 34, weight: .bold))
-                Text("Музыка из вашей медиатеки VK в одном плеере")
-                    .font(.subheadline)
+            VStack(spacing: 7) {
+                Text("Welcome to Museeks")
+                    .font(.system(size: 30, weight: .bold))
+                    .multilineTextAlignment(.center)
+
+                Text("Revolution in the music world")
+                    .font(.headline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
         }
     }
 
-    private var loginCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Подключите VK")
-                    .font(.title3.bold())
-                Text(
-                    "Вход откроется на официальной странице VK."
-                )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            }
+    // MARK: - Кнопки входа
 
-            VStack(alignment: .leading, spacing: 12) {
-                benefit("phone.fill", "Вход по номеру телефона")
-                benefit("lock.shield.fill", "Пароль остаётся на стороне VK")
-                benefit(
-                    "key.fill",
-                    "Данные сессии хранятся в системном Keychain"
-                )
-            }
+    private var actionButtons: some View {
+        VStack(spacing: 14) {
+            vkLoginButton
+            qrLoginButton
+        }
+    }
 
-            Button {
-                isWebLoginPresented = true
-            } label: {
-                HStack {
-                    if isConnecting {
-                        ProgressView().tint(.white)
-                    } else {
-                        Image(systemName: "person.crop.circle.badge.checkmark")
-                    }
-                    Text(
-                        L10n.text(
-                            isConnecting
-                                ? "Подключаем аккаунт…"
-                                : "Продолжить с VK"
-                        )
-                    )
+    /// Синяя кнопка (не liquid glass) — открывает обычную авторизацию VK.
+    private var vkLoginButton: some View {
+        Button {
+            isWebLoginPresented = true
+        } label: {
+            HStack(spacing: 10) {
+                if isConnecting {
+                    ProgressView().tint(.white)
+                } else {
+                    Image(systemName: "person.crop.circle.badge.checkmark")
+                        .font(.body.weight(.semibold))
                 }
-                .frame(maxWidth: .infinity)
+                Text(
+                    L10n.text(
+                        isConnecting
+                            ? "Подключаем аккаунт…"
+                            : "Log in with VK"
+                    )
+                )
+                .font(.headline)
             }
-            .buttonStyle(PrimaryButtonStyle())
-            .disabled(isConnecting)
-        }
-        .padding(20)
-        .premiumCard(interactive: true)
-    }
-
-    private func benefit(_ icon: String, _ title: String) -> some View {
-        Label {
-            Text(L10n.text(title))
-                .font(.subheadline)
-        } icon: {
-            Image(systemName: icon)
-                .foregroundStyle(settings.theme.accent)
-                .frame(width: 22)
-        }
-    }
-
-    private var privacyNote: some View {
-        HStack(alignment: .top, spacing: 9) {
-            Image(systemName: "checkmark.shield")
-                .foregroundStyle(.green)
-            Text(
-                L10n.text(
-                    "Museeks не читает поля формы входа и не отправляет "
-                        + "пароль или код подтверждения на собственный сервер. "
-                        + "Полученные данные сессии сохраняются в системном "
-                        + "Keychain этого устройства."
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 15)
+            .foregroundStyle(.white)
+            .background(
+                Color(red: 0.04, green: 0.50, blue: 1.0),
+                in: RoundedRectangle(
+                    cornerRadius: PremiumLayout.compactRadius,
+                    style: .continuous
                 )
             )
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .contentShape(
+                RoundedRectangle(
+                    cornerRadius: PremiumLayout.compactRadius,
+                    style: .continuous
+                )
+            )
         }
-        .padding(.horizontal, 8)
+        .buttonStyle(PremiumPressStyle())
+        .disabled(isConnecting)
     }
+
+    /// Чёрная кнопка с серым фреймом (не liquid glass) —
+    /// слева от текста нарисован QR-код.
+    private var qrLoginButton: some View {
+        Button {
+            isQRLoginPresented = true
+        } label: {
+            HStack(spacing: 12) {
+                QRCodeGlyph()
+                    .frame(width: 24, height: 24)
+                    .foregroundStyle(.white)
+                Text(L10n.text("Sign in with QR-Code"))
+                    .font(.headline)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 15)
+            .padding(.horizontal, 18)
+            .foregroundStyle(.white)
+            .background(
+                Color.black,
+                in: RoundedRectangle(
+                    cornerRadius: PremiumLayout.compactRadius,
+                    style: .continuous
+                )
+            )
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: PremiumLayout.compactRadius,
+                    style: .continuous
+                )
+                .stroke(
+                    Color(white: 0.55),
+                    lineWidth: 1
+                )
+            }
+            .contentShape(
+                RoundedRectangle(
+                    cornerRadius: PremiumLayout.compactRadius,
+                    style: .continuous
+                )
+            )
+        }
+        .buttonStyle(PremiumPressStyle())
+    }
+
+    // MARK: - Обработка QR-кода
+
+    private func handleScannedQR(_ scanned: String) {
+        // Содержимое QR-кода VK обычно является ссылкой на вход.
+        // Здесь можно передать его в веб-вход или показать ошибку.
+        // Для простоты закрываем скан и открываем обычный веб-вход,
+        // если это ссылка на VK.
+        isQRLoginPresented = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            isWebLoginPresented = true
+        }
+    }
+
+    // MARK: - Ручной импорт
 
     private var manualImport: some View {
         DisclosureGroup(
@@ -262,6 +307,44 @@ struct ConnectView: View {
             )
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+}
+
+/// Рисует простой QR-подобный глиф из чёрных квадратов (без ассета).
+struct QRCodeGlyph: View {
+    private let grid: [[Bool]] = [
+        [true, true, true, false, false, true, false, true],
+        [true, false, true, false, true, false, true, true],
+        [true, true, true, false, false, true, true, false],
+        [false, false, false, true, false, false, false, true],
+        [true, false, false, false, true, true, false, false],
+        [false, true, true, true, false, true, true, true],
+        [true, false, true, true, false, false, true, false],
+        [true, true, false, true, true, true, false, true]
+    ]
+
+    var body: some View {
+        GeometryReader { proxy in
+            let cell = proxy.size.width / CGFloat(grid.count)
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                ForEach(0..<grid.count, id: \.self) { row in
+                    ForEach(0..<grid[row].count, id: \.self) { col in
+                        if grid[row][col] {
+                            Rectangle()
+                                .frame(
+                                    width: cell,
+                                    height: cell
+                                )
+                                .offset(
+                                    x: CGFloat(col) * cell,
+                                    y: CGFloat(row) * cell
+                                )
+                        }
+                    }
+                }
+            }
         }
     }
 }

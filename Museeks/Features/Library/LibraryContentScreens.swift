@@ -150,3 +150,40 @@ struct ArtistsScreen: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 }
+
+// MARK: - Placeholder screen
+
+/// Simple placeholder page for sections that have no VK data source yet
+/// (Подкасты, Аудиокниги, Радио). Shows a friendly empty state.
+struct LibraryPlaceholderScreen: View {
+    let title: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        VStack(spacing: 16) {
+            ZStack {
+                RoundedRectangle(
+                    cornerRadius: 20,
+                    style: .continuous
+                )
+                .fill(tint.opacity(0.22))
+                .frame(width: 88, height: 88)
+                Image(systemName: systemImage)
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+            Text(L10n.text("Раздел скоро появится"))
+                .font(.headline)
+            Text(L10n.text("Пока в VK нет данных для этого раздела."))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(ThemeBackground())
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}

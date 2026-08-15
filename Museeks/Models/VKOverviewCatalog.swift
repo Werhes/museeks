@@ -27,11 +27,15 @@ struct VKOverviewCatalog: Sendable {
     var isEmpty: Bool { shelves.allSatisfy(\.isEmpty) && bannerURLs.isEmpty }
 }
 
-/// Fallback section ids for the «Обзор» explore catalog. The real id is
-/// resolved at runtime from `catalog.getAudio`; these are only used when that
-/// resolution fails.
+/// Fallback section ids for the home-feed catalog. The real id is resolved at
+/// runtime from `catalog.getAudio`; these are only used when that resolution
+/// fails. `home` is the «Главная» personalised feed; `overview` is the
+/// «Обзор» explore catalog.
 enum VKOverviewSectionID {
-    static let explore = "PUldVA8FR0RzSVNUUEwbCikZDFQZFlJEfFpFVA0WUVFxX1lHAQBSUDs"
+    static let home =
+        "PUldVA8FR0RzSVNUUlEFAzQKBVQZFlJEfFpFVA0WUVFxX1lHAQBSUDs"
+    static let explore =
+        "PUldVA8FR0RzSVNUUEwbCikZDFQZFlJEfFpFVA0WUVFxX1lHAQBSUDs"
 }
 
 /// Mapping helpers used while decoding the raw `catalog.getSection` payload.
@@ -44,6 +48,11 @@ enum VKOverviewBlockPolicy {
     /// Block titles the product intentionally surfaces in a fixed order.
     static func preferredOrder() -> [String] {
         [
+            // «Главная» (Home) feed shelves.
+            "Мои треки",
+            "Собрано алгоритмами",
+            "Похоже на",
+            // «Обзор» (Overview) explore shelves.
             "Сегодня в плеере",
             "Выбор редакции",
             "Новинки",

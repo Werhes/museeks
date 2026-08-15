@@ -169,21 +169,29 @@ enum JSONValue: Codable, Sendable {
     /// is a block that references either `audios_ids` (tracks) or
     /// `playlists_ids` (playlists/albums), with full metadata supplied under
     /// `response.audios` / `response.playlists`.
-    /// The «Обзор» section id from `catalog.getAudio` root catalog sections.
+    /// The home-feed section id from `catalog.getAudio` root catalog sections.
+    /// Prefers the «Главная» (Home) feed — the rich personalised shelves the
+    /// product shows on the home tab — and falls back to «Обзор» (Overview)
+    /// when «Главная» is absent.
     var overviewSectionID: String? {
         guard case let .object(object) = self,
               case let .object(catalog)? = object["catalog"],
               case let .array(sections)? = catalog["sections"] else {
             return nil
         }
+        var overviewID: String?
         for section in sections {
             guard case let .object(sectionObject) = section else { continue }
             let title = sectionObject["title"]?.stringValue ?? ""
-            if title == "Обзор" || title == "Overview" {
+            if title == "Главная" || title == "Home" {
                 return sectionObject["id"]?.stringValue
             }
+            if overviewID == nil,
+               title == "Обзор" || title == "Overview" {
+                overviewID = sectionObject["id"]?.stringValue
+            }
         }
-        return nil
+        return overviewID
     }
 
     var overviewShelves: [VKOverviewShelf] {

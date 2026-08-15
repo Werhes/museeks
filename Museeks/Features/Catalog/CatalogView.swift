@@ -59,6 +59,13 @@ struct CatalogView: View {
                             if !playlists.isEmpty {
                                 playlistsSection(metrics: metrics)
                             }
+
+                            // «Главная» (Home) feed shelves — «Мои треки»,
+                            // «Собрано алгоритмами», «Похоже на …» and other
+                            // personalised sections returned by the real VK
+                            // «Главная» catalog section.
+                            homeFeedSections(metrics: metrics)
+
                             if contentIsEmpty { unavailableView }
                             if let errorMessage, !contentIsEmpty {
                                 retryRow(errorMessage)
@@ -184,6 +191,7 @@ struct CatalogView: View {
         recommendations.isEmpty && playlists.isEmpty
             && homeCatalog.newReleases.isEmpty
             && homeCatalog.mixes.isEmpty
+            && overviewCatalog.shelves.isEmpty
     }
 
     private var welcomeHeader: some View {
@@ -396,6 +404,102 @@ struct CatalogView: View {
                     spacing: metrics.cardSpacing
                 ) {
                     ForEach(playlists.prefix(16)) { playlist in
+                        NavigationLink {
+                            PlaylistDetailView(playlist: playlist)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                PlaylistArtworkView(
+                                    playlist: playlist,
+                                    size: metrics.playlistWidth
+                                )
+                                Text(playlist.title)
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(2)
+                                    .frame(
+                                        height: 34,
+                                        alignment: .topLeading
+                                    )
+                                Text(
+                                    L10n.format(
+                                        "%@ • %@",
+                                        L10n.trackCount(playlist.count),
+                                        playlist.source.shortTitle
+                                    )
+                                )
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            .frame(
+                                width: metrics.playlistWidth,
+                                alignment: .topLeading
+                            )
+                        }
+                        .buttonStyle(PremiumPressStyle())
+                    }
+                }
+            }
+        }
+    }
+
+    /// «Главная» (Home) feed: renders the personalised shelves returned by the
+    /// real VK «Главная» catalog section («Мои треки», «Собрано алгоритмами»,
+    /// «Похоже на …»). The shelves are loaded into `overviewCatalog` by
+    /// `refreshOverviewCatalog` and rendered exactly like the overview explore
+    /// shelves, but on the home tab.
+    @ViewBuilder
+    private func homeFeedSections(metrics: HomeMetrics) -> some View {
+        if !overviewCatalog.shelves.isEmpty {
+            ForEach(overviewCatalog.shelves) { shelf in
+                switch shelf.kind {
+                case .tracks:
+                    homeFeedTracks(shelf, metrics: metrics)
+                case .playlists:
+                    homeFeedPlaylists(shelf, metrics: metrics)
+                }
+            }
+        }
+    }
+
+    private func homeFeedTracks(
+        _ shelf: VKOverviewShelf,
+        metrics: HomeMetrics
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HomeSectionHeader(shelf.title)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(
+                    alignment: .top,
+                    spacing: metrics.cardSpacing
+                ) {
+                    ForEach(shelf.tracks.prefix(14)) { track in
+                        homeTrackItem(
+                            track,
+                            queue: shelf.tracks,
+                            artworkSize: metrics.trackWidth
+                        )
+                        .contextMenu {
+                            trackContextMenu(track, queue: shelf.tracks)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func homeFeedPlaylists(
+        _ shelf: VKOverviewShelf,
+        metrics: HomeMetrics
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HomeSectionHeader(shelf.title)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(
+                    alignment: .top,
+                    spacing: metrics.cardSpacing
+                ) {
+                    ForEach(shelf.playlists.prefix(14)) { playlist in
                         NavigationLink {
                             PlaylistDetailView(playlist: playlist)
                         } label: {
@@ -792,7 +896,9 @@ struct CatalogView: View {
     }
 
     private func load(force: Bool = false) async {
-        await environment.refreshHomeCatalog(force: force)
+        async let home: Void = environment.refreshHomeCatalog(force: force)
+        async let feed: Void = environment.refreshOverviewCatalog(force: force)
+        _ = await (home, feed)
     }
 }
 
