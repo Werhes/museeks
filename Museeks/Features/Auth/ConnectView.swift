@@ -180,14 +180,32 @@ struct ConnectView: View {
 
     // MARK: - Обработка QR-кода
 
+    /// Выполняет реальный вход по сканированному QR-коду VK (протокол
+    /// auth-code), а не открывает обычную страницу логина. Сначала показываем
+    /// индикатор подключения, затем обмениваем содержимое QR на access-токен
+    /// и создаём сессию.
     private func handleScannedQR(_ scanned: String) {
-        // Содержимое QR-кода VK обычно является ссылкой на вход.
-        // Здесь можно передать его в веб-вход или показать ошибку.
-        // Для простоты закрываем скан и открываем обычный веб-вход,
-        // если это ссылка на VK.
         isQRLoginPresented = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            isWebLoginPresented = true
+        let service = VKQRAuthService()
+        Task {
+            do {
+                let result = try await service.authenticate(
+                    scannedContent: scanned
+                )
+                let webResult = VKWebAuthResult(
+                    accessToken: result.accessToken,
+                    userID: nil,
+                    expiresAt: nil,
+                    apiUserAgent: result.apiUserAgent,
+                    refreshCookie: "",
+                    webUserAgent: result.webUserAgent
+                )
+                await connectWebSession(webResult)
+            } catch is CancellationError {
+                return
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 

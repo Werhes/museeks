@@ -60,7 +60,6 @@ struct CatalogView: View {
                             }
                             if !recommendations.isEmpty {
                                 recommendationsSection(metrics: metrics)
-                                trackListSection
                             }
                             if !playlists.isEmpty {
                                 playlistsSection(metrics: metrics)
@@ -300,24 +299,6 @@ struct CatalogView: View {
         }
     }
 
-    private var trackListSection: some View {
-        VStack(alignment: .leading, spacing: 11) {
-            HomeSectionHeader("Ещё для вас")
-            VStack(spacing: 0) {
-                ForEach(Array(recommendations.prefix(10).enumerated()), id: \.element.id) {
-                    index, track in
-                    TrackRow(track: track, queue: recommendations)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                    if index < min(recommendations.count, 10) - 1 {
-                        Divider().padding(.leading, 72)
-                    }
-                }
-            }
-            .premiumCard()
-        }
-    }
-
     private func newReleasesSection(metrics: HomeMetrics) -> some View {
         VStack(alignment: .leading, spacing: 11) {
             NavigationLink {
@@ -510,10 +491,7 @@ struct CatalogView: View {
         metrics: HomeMetrics
     ) -> some View {
         VStack(alignment: .leading, spacing: 11) {
-            HomeSectionHeader(
-                "Для вас",
-                subtitle: shelf.title
-            )
+            HomeSectionHeader(shelf.title)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(
                     alignment: .top,
@@ -527,32 +505,9 @@ struct CatalogView: View {
                             )
                         } label: {
                             VStack(alignment: .leading, spacing: 8) {
-                                ZStack {
-                                    LinearGradient(
-                                        colors: forYouColors(for: playlist),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                    Image(systemName: forYouSymbol(for: playlist))
-                                        .font(.system(size: 34, weight: .black))
-                                        .foregroundStyle(.white.opacity(0.92))
-                                }
-                                .frame(
-                                    width: metrics.playlistWidth,
-                                    height: metrics.playlistWidth
-                                )
-                                .clipShape(
-                                    RoundedRectangle(
-                                        cornerRadius: PremiumLayout.artworkRadius(
-                                            for: metrics.playlistWidth
-                                        ),
-                                        style: .continuous
-                                    )
-                                )
-                                .shadow(
-                                    color: .black.opacity(0.18),
-                                    radius: 10,
-                                    y: 5
+                                PlaylistArtworkView(
+                                    playlist: playlist,
+                                    size: metrics.playlistWidth
                                 )
 
                                 Text(playlist.title)
@@ -623,7 +578,7 @@ struct CatalogView: View {
                                 }
                                 .frame(
                                     width: metrics.playlistWidth,
-                                    height: metrics.playlistWidth * 0.72
+                                    height: metrics.playlistWidth
                                 )
                                 .clipShape(
                                     RoundedRectangle(
@@ -684,7 +639,7 @@ struct CatalogView: View {
                                 }
                                 .frame(
                                     width: metrics.playlistWidth,
-                                    height: metrics.playlistWidth * 0.72
+                                    height: metrics.playlistWidth
                                 )
                                 .clipShape(
                                     RoundedRectangle(
@@ -713,21 +668,6 @@ struct CatalogView: View {
             return Color(red: 0.98, green: 0.45, blue: 0.15)
         default:
             return Color(red: 0.20, green: 0.65, blue: 0.55)
-        }
-    }
-
-    private func forYouColors(for playlist: Playlist) -> [Color] {
-        let base = forYouColor(for: playlist)
-        return [base, base.opacity(0.6), base.opacity(0.35)]
-    }
-
-    private func forYouSymbol(for playlist: Playlist) -> String {
-        switch playlist.title {
-        case let t where t.contains("Новинки"): return "sparkles"
-        case let t where t.contains("Открытия"): return "safari.fill"
-        case let t where t.contains("Плейлист дня"): return "calendar"
-        case let t where t.contains("Для вас"): return "heart.fill"
-        default: return "music.note"
         }
     }
 

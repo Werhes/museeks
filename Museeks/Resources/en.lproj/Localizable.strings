@@ -587,3 +587,7 @@
 "Миксы по артистам из вашей медиатеки" = "Artist mixes from your library";
 "Микс по артисту" = "Mix based on this artist";
 "Воспроизвести микс артиста" = "Play artist mix";
+
+"Не удалось распознать QR-код входа. Сканируйте код из меню VK «Вход по QR-коду»." = "Could not read the sign-in QR code. Scan the code from VK's «Sign in with QR code» menu.";
+"VK не подтвердил вход по QR-коду." = "VK did not confirm the QR-code sign-in.";
+"VK вернул некорректный ответ при входе по QR-коду." = "VK returned an invalid response during QR-code sign-in.";

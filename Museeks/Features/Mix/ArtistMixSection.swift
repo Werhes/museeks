@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// «Микс по артисту» shelf: a horizontal row of square artist cards (rounded
-/// corners), each showing the artist's VK avatar, the artist name underneath,
-/// and a play button in the bottom-right corner that starts a continuous mix
-/// built around that artist via `audio.getStreamMixAudios(entity_id=…)`.
+/// «Микс по артисту» shelf. Cards mirror the official VK client layout
+/// (see Music-M `ArtistMixButton`): a square artist image with rounded corners
+/// sits on top, the artist name + a short subtitle are shown below it in their
+/// own padded area (never covered by the image), and a play button floats in
+/// the bottom-right corner of the image. Tapping anywhere on the card starts
+/// the artist's continuous mix via `audio.getStreamMixAudios(entity_id=…)`.
 struct ArtistMixSection: View {
     let artists: [VKArtist]
     let metrics: HomeMetrics
@@ -37,54 +39,72 @@ struct ArtistMixSection: View {
     }
 
     private func artistCard(_ artist: VKArtist) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ZStack(alignment: .bottomTrailing) {
-                AsyncArtwork(url: artist.photoURL, size: metrics.trackWidth)
+        VStack(alignment: .leading, spacing: 8) {
+            image(for: artist)
 
-                Button {
-                    startArtistMix(artist)
-                } label: {
-                    Group {
-                        if startingArtistID == artist.id {
-                            ProgressView()
-                                .tint(.black)
-                        } else {
-                            Image(systemName: "play.fill")
-                        }
-                    }
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.black)
-                    .frame(width: 34, height: 34)
-                    .background(.white, in: Circle())
-                }
-                .buttonStyle(PremiumPressStyle())
-                .offset(
-                    x: metrics.trackWidth - 41,
-                    y: metrics.trackWidth - 41
-                )
-                .disabled(startingArtistID != nil)
-                .accessibilityLabel(
-                    L10n.format(
-                        "%@ · %@",
-                        artist.name,
-                        L10n.text("Воспроизвести микс артиста")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(artist.name)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(
+                        isCurrentlyPlaying(artist)
+                            ? Color.accentColor
+                            : Color.primary
                     )
-                )
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text(L10n.text("Микс по артисту"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            .frame(width: metrics.trackWidth, height: metrics.trackWidth)
-
-            Text(artist.name)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(
-                    isCurrentlyPlaying(artist)
-                        ? Color.accentColor
-                        : Color.primary
-                )
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(width: metrics.trackWidth, alignment: .leading)
+            .frame(width: metrics.trackWidth, alignment: .leading)
         }
         .frame(width: metrics.trackWidth, alignment: .topLeading)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            startArtistMix(artist)
+        }
+        .disabled(startingArtistID != nil)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            L10n.format(
+                "%@ · %@",
+                artist.name,
+                L10n.text("Воспроизвести микс артиста")
+            )
+        )
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private func image(for artist: VKArtist) -> some View {
+        ZStack(alignment: .bottomTrailing) {
+            AsyncArtwork(url: artist.photoURL, size: metrics.trackWidth)
+
+            Button {
+                startArtistMix(artist)
+            } label: {
+                Group {
+                    if startingArtistID == artist.id {
+                        ProgressView()
+                            .tint(.black)
+                    } else {
+                        Image(systemName: "play.fill")
+                    }
+                }
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.black)
+                .frame(width: 32, height: 32)
+                .background(.white, in: Circle())
+            }
+            .buttonStyle(PremiumPressStyle())
+            .offset(
+                x: metrics.trackWidth - 39,
+                y: metrics.trackWidth - 39
+            )
+            .disabled(startingArtistID != nil)
+        }
+        .frame(width: metrics.trackWidth, height: metrics.trackWidth)
     }
 
     private func startArtistMix(_ artist: VKArtist) {
