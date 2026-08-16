@@ -20,6 +20,7 @@ struct CatalogView: View {
     @State private var mode: CatalogMode = .home
     @State private var artistMixes: [VKArtist] = []
     @State private var isLoadingArtistMixes = false
+    @State private var startingMixID: String?
 
     var body: some View {
         switch mode {
@@ -484,8 +485,8 @@ struct CatalogView: View {
     }
 
     /// «Для вас» shelf: Открытия, Новинки, Плейлист дня 1–5. Each entry is a
-    /// distinct gradient card that opens its own dedicated screen, not a
-    /// generic playlist detail.
+    /// distinct branded `ForYouCard` (rounded card + floating play button)
+    /// that opens its own dedicated screen, not a generic playlist detail.
     private func homeFeedPlaylists(
         _ shelf: VKOverviewShelf,
         metrics: HomeMetrics
@@ -498,34 +499,17 @@ struct CatalogView: View {
                     spacing: metrics.cardSpacing
                 ) {
                     ForEach(shelf.playlists.prefix(14)) { playlist in
+                        let accent = forYouColor(for: playlist)
                         NavigationLink {
                             ForYouSectionView(
                                 playlist: playlist,
-                                accent: forYouColor(for: playlist)
+                                accent: accent
                             )
                         } label: {
-                            VStack(alignment: .leading, spacing: 8) {
-                                PlaylistArtworkView(
-                                    playlist: playlist,
-                                    size: metrics.playlistWidth
-                                )
-
-                                Text(playlist.title)
-                                    .font(.footnote.weight(.semibold))
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(2)
-                                    .frame(
-                                        height: 34,
-                                        alignment: .topLeading
-                                    )
-                                Text(L10n.trackCount(playlist.count))
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            .frame(
-                                width: metrics.playlistWidth,
-                                alignment: .topLeading
+                            ForYouCard(
+                                playlist: playlist,
+                                accent: accent,
+                                size: metrics.playlistWidth
                             )
                         }
                         .buttonStyle(PremiumPressStyle())
@@ -548,10 +532,10 @@ struct CatalogView: View {
                         spacing: metrics.cardSpacing
                     ) {
                         ForEach(homeFeed.genres) { genre in
-                            NavigationLink {
-                                MixView(mix: genre.mix)
+                            Button {
+                                startMix(genre.mix, loadingID: genre.id)
                             } label: {
-                                ZStack(alignment: .bottomLeading) {
+                                ZStack(alignment: .center) {
                                     CachedRemoteImage(url: genre.artworkURL) { image in
                                         image.resizable().scaledToFill()
                                     } placeholder: {
@@ -564,18 +548,18 @@ struct CatalogView: View {
                                             endPoint: .bottomTrailing
                                         )
                                     }
-                                    LinearGradient(
-                                        colors: [.clear, .black.opacity(0.88)],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
+                                    Color.black.opacity(0.32)
                                     Text(genre.title)
                                         .font(.title3.weight(.bold))
                                         .foregroundStyle(.white)
                                         .lineLimit(2)
-                                        .multilineTextAlignment(.leading)
-                                        .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
+                                        .multilineTextAlignment(.center)
+                                        .shadow(color: .black.opacity(0.6), radius: 3, y: 1)
                                         .padding(14)
+                                    if startingMixID == genre.id {
+                                        ProgressView()
+                                            .tint(.white)
+                                    }
                                 }
                                 .frame(
                                     width: metrics.genreWidth,
@@ -587,8 +571,10 @@ struct CatalogView: View {
                                         style: .continuous
                                     )
                                 )
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(PremiumPressStyle())
+                            .disabled(startingMixID == genre.id)
                         }
                     }
                 }
@@ -610,10 +596,10 @@ struct CatalogView: View {
                         spacing: metrics.cardSpacing
                     ) {
                         ForEach(homeFeed.moods) { mood in
-                            NavigationLink {
-                                MixView(mix: mood.mix)
+                            Button {
+                                startMix(mood.mix, loadingID: mood.id)
                             } label: {
-                                ZStack(alignment: .bottomLeading) {
+                                ZStack(alignment: .center) {
                                     CachedRemoteImage(url: mood.artworkURL) { image in
                                         image.resizable().scaledToFill()
                                     } placeholder: {
@@ -626,18 +612,18 @@ struct CatalogView: View {
                                             endPoint: .bottomTrailing
                                         )
                                     }
-                                    LinearGradient(
-                                        colors: [.clear, .black.opacity(0.88)],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
+                                    Color.black.opacity(0.32)
                                     Text(mood.title)
                                         .font(.title3.weight(.bold))
                                         .foregroundStyle(.white)
                                         .lineLimit(2)
-                                        .multilineTextAlignment(.leading)
-                                        .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
+                                        .multilineTextAlignment(.center)
+                                        .shadow(color: .black.opacity(0.6), radius: 3, y: 1)
                                         .padding(14)
+                                    if startingMixID == mood.id {
+                                        ProgressView()
+                                            .tint(.white)
+                                    }
                                 }
                                 .frame(
                                     width: metrics.genreWidth,
@@ -649,11 +635,56 @@ struct CatalogView: View {
                                         style: .continuous
                                     )
                                 )
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(PremiumPressStyle())
+                            .disabled(startingMixID == mood.id)
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /// Starts playback for a genre or mood mix with its specified settings
+    /// (the `selection`/`additionals` carried by the `MusicMix`). Mirrors the
+    /// auto-play pipeline used by artist mixes. `loadingID` is the card's
+    /// unique identifier (genre/mood id) used to drive the loading state.
+    private func startMix(_ mix: MusicMix, loadingID: String) {
+        guard sessionStore.accessToken != nil,
+              startingMixID == nil else { return }
+        startingMixID = loadingID
+        Task {
+            defer { startingMixID = nil }
+            do {
+                let bootstrap = try await environment.withAuthorizedToken {
+                    token in
+                    try await environment.musicService.mixTracksBootstrap(
+                        mix,
+                        accessToken: token
+                    )
+                }
+                guard let first = bootstrap.first else { return }
+                MixBootstrapPrefetch.artwork(for: bootstrap)
+                player.play(
+                    first,
+                    in: bootstrap,
+                    continuation: {
+                        try await environment.withAuthorizedToken { token in
+                            try await environment.musicService
+                                .mixTracksContinuation(
+                                    mix,
+                                    accessToken: token
+                                )
+                        }
+                    },
+                    source: .mix(title: mix.title)
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                // Playback failed to start — the card simply returns to its
+                // idle state without surfacing a heavy alert.
             }
         }
     }

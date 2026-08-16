@@ -29,82 +29,19 @@ struct ArtistMixSection: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                         ForEach(artists) { artist in
-                            artistCard(artist)
+                            ArtistMixCard(
+                                artist: artist,
+                                size: metrics.trackWidth,
+                                isPlaying: isCurrentlyPlaying(artist),
+                                isLoading: startingArtistID == artist.id,
+                                onPlay: { startArtistMix(artist) }
+                            )
                         }
                     }
                 }
             }
             .accessibilityElement(children: .contain)
         }
-    }
-
-    private func artistCard(_ artist: VKArtist) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            image(for: artist)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(artist.name)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(
-                        isCurrentlyPlaying(artist)
-                            ? Color.accentColor
-                            : Color.primary
-                    )
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Text(L10n.text("Микс по артисту"))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            .frame(width: metrics.trackWidth, alignment: .leading)
-        }
-        .frame(width: metrics.trackWidth, alignment: .topLeading)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            startArtistMix(artist)
-        }
-        .disabled(startingArtistID != nil)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            L10n.format(
-                "%@ · %@",
-                artist.name,
-                L10n.text("Воспроизвести микс артиста")
-            )
-        )
-        .accessibilityAddTraits(.isButton)
-    }
-
-    private func image(for artist: VKArtist) -> some View {
-        ZStack(alignment: .bottomTrailing) {
-            AsyncArtwork(url: artist.photoURL, size: metrics.trackWidth)
-
-            Button {
-                startArtistMix(artist)
-            } label: {
-                Group {
-                    if startingArtistID == artist.id {
-                        ProgressView()
-                            .tint(.black)
-                    } else {
-                        Image(systemName: "play.fill")
-                    }
-                }
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.black)
-                .frame(width: 32, height: 32)
-                .background(.white, in: Circle())
-            }
-            .buttonStyle(PremiumPressStyle())
-            .offset(
-                x: metrics.trackWidth - 39,
-                y: metrics.trackWidth - 39
-            )
-            .disabled(startingArtistID != nil)
-        }
-        .frame(width: metrics.trackWidth, height: metrics.trackWidth)
     }
 
     private func startArtistMix(_ artist: VKArtist) {
